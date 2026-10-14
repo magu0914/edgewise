@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-tests:
+    # Core（Assets/Game/Core）を dotnet + NUnit でテストする。Unity は使わない（ライセンス不要）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Restore
+        run: dotnet restore dotnet/Edgewise.sln
+      - name: Build
+        run: dotnet build dotnet/Edgewise.sln --no-restore -c Release
+      - name: Test
+        run: dotnet test dotnet/Edgewise.sln --no-build -c Release --logger "trx;LogFileName=results.trx" --logger "console;verbosity=normal"
+      - name: Simulator smoke run
+        run: dotnet run --no-build -c Release --project dotnet/Edgewise.Sim -- --games 200
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: dotnet/**/TestResults/*.trx

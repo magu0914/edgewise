@@ -1,0 +1,12 @@
+<Project>
+  <!-- Core は Unity でもコンパイルするため C# 9 に固定する（Unity で使えない構文を dotnet 側でも弾く）。 -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <!-- ImplicitUsings は global using（C# 10）を生成するので使わない -->
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>

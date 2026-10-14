@@ -1,0 +1,32 @@
+# 改行はリポジトリ内では LF に正規化する
+* text=auto eol=lf
+
+# Windows 専用
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Unity の YAML アセット
+*.unity    text eol=lf
+*.prefab   text eol=lf
+*.asset    text eol=lf linguist-generated
+*.mat      text eol=lf
+*.meta     text eol=lf linguist-generated
+*.controller text eol=lf
+*.anim     text eol=lf
+
+# テスト用ゴールデンデータ（TS 版から生成）
+dotnet/Edgewise.Core.Tests/Golden/*.json text eol=lf linguist-generated -diff
+
+# バイナリ
+*.png binary
+*.jpg binary
+*.psd binary
+*.wav binary
+*.mp3 binary
+*.ogg binary
+*.ttf binary
+*.otf binary
+*.dll binary
+*.so binary
+*.unitypackage binary

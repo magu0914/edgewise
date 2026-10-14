@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Edgewise.Sim</RootNamespace>
+  </PropertyGroup>
+
+  <!-- Unity の Core（Assets/Game/Core）のソースをそのままリンクしてビルドする -->
+  <ItemGroup>
+    <Compile Include="..\..\Assets\Game\Core\**\*.cs" Link="Core\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>
