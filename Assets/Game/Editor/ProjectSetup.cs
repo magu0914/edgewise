@@ -11,11 +11,14 @@ using UnityEngine.Rendering.Universal;
 namespace Edgewise.EditorTools
 {
     /// <summary>
-    /// プロジェクトの初期設定（冪等）。batchmode から呼べる:
-    ///   Unity -batchmode -quit -projectPath . -executeMethod Edgewise.EditorTools.ProjectSetup.Run
-    /// - URP の 2D Renderer と Pipeline Asset を作り、Graphics / Quality 設定に割り当てる
-    /// - Player 設定（製品名・Linear・WebGL の解凍フォールバック）
-    /// - デバッグ表示つきの Main シーンを作り、Build Settings に登録する
+    /// プロジェクトの生成・更新（冪等。何度実行しても同じ結果）。batchmode から呼べる:
+    ///   tools/RunUnity.ps1 -LogName setup.log -Extra '-executeMethod','Edgewise.EditorTools.ProjectSetup.Run'
+    /// 1. URP の 2D Renderer と Pipeline Asset を作り、Graphics / Quality 設定に割り当てる
+    /// 2. Player 設定（製品名・Linear・WebGL のテンプレートと解凍フォールバック）
+    /// 3. TextMeshPro の Essential Resources と日本語フォントアセット（FontBuilder）
+    /// 4. マテリアル・生成テクスチャ・JuiceSettings・Volume Profile・GameAssets・Card プレハブ（ArtBuilder）
+    /// 5. 旧デバッグ表示のシーンを Debug.unity に移し、Main.unity を作り直す（SceneBuilder）
+    /// 6. Build Settings を [Main, Debug] にする
     /// </summary>
     public static class ProjectSetup
     {
@@ -23,6 +26,8 @@ namespace Edgewise.EditorTools
         public const string RendererPath = SettingsDir + "/Renderer2D.asset";
         public const string PipelinePath = SettingsDir + "/URP-2D.asset";
         public const string MainScenePath = "Assets/Scenes/Main.unity";
+        public const string DebugScenePath = "Assets/Scenes/Debug.unity";
+        public const string WebGLTemplate = "PROJECT:Edgewise";
 
         [MenuItem("Edgewise/Project Setup")]
         public static void Run()
@@ -33,7 +38,15 @@ namespace Edgewise.EditorTools
             var pipeline = EnsurePipelineAsset();
             AssignPipeline(pipeline);
             ConfigurePlayer();
-            EnsureMainScene();
+
+            FontBuilder.EnsureTmpEssentials();
+            var (font, outline) = FontBuilder.Build();
+            FontBuilder.TrimTmpEssentials();
+            var assets = ArtBuilder.Build(font, outline);
+            var volume = ArtBuilder.EnsureVolumeProfile();
+
+            EnsureDebugScene();
+            SceneBuilder.BuildMain(MainScenePath, assets, volume);
             RegisterScenes();
 
             AssetDatabase.SaveAssets();
@@ -62,6 +75,8 @@ namespace Edgewise.EditorTools
                 AssetDatabase.CreateAsset(pipeline, PipelinePath);
                 Debug.Log("[Edgewise] Created " + PipelinePath);
             }
+            pipeline.supportsHDR = true;
+            EditorUtility.SetDirty(pipeline);
             return pipeline;
         }
 
@@ -106,16 +121,42 @@ namespace Edgewise.EditorTools
             PlayerSettings.productName = "Edgewise";
             PlayerSettings.companyName = "magu";
             PlayerSettings.colorSpace = ColorSpace.Linear;
+            PlayerSettings.runInBackground = true;
             // GitHub Pages / unityroom など Content-Encoding を付けられないホストでも動くように、JS 側での解凍を許可する
             PlayerSettings.WebGL.decompressionFallback = true;
+            // 画面いっぱいに表示するテンプレート（Assets/WebGLTemplates/Edgewise）
+            PlayerSettings.WebGL.template = WebGLTemplate;
+            // WebGL のダウンロードサイズを抑える: スプラッシュなし、IL2CPP はサイズ優先、未使用コードの除去を強める
+            PlayerSettings.SplashScreen.show = false;
+            PlayerSettings.SplashScreen.showUnityLogo = false;
+            var webgl = UnityEditor.Build.NamedBuildTarget.WebGL;
+            PlayerSettings.SetManagedStrippingLevel(webgl, ManagedStrippingLevel.Medium);
+            PlayerSettings.SetIl2CppCodeGeneration(webgl, UnityEditor.Build.Il2CppCodeGeneration.OptimizeSize);
+            EditorUserBuildSettings.SetPlatformSettings(BuildPipeline.GetBuildTargetName(BuildTarget.WebGL), "CodeOptimization", "disksize");
         }
 
-        static void EnsureMainScene()
+        /// <summary>Phase 2 のデバッグ表示（DebugBoardView）のシーンを Debug.unity として残す。</summary>
+        static void EnsureDebugScene()
         {
-            if (File.Exists(MainScenePath)) return;
+            if (File.Exists(DebugScenePath)) return;
+            if (File.Exists(MainScenePath))
+            {
+                EditorSceneManager.OpenScene(MainScenePath, OpenSceneMode.Single);
+                bool isDebug = UnityEngine.Object.FindAnyObjectByType<DebugBoardView>() != null;
+                EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                if (isDebug)
+                {
+                    string err = AssetDatabase.MoveAsset(MainScenePath, DebugScenePath);
+                    if (string.IsNullOrEmpty(err))
+                    {
+                        Debug.Log("[Edgewise] Moved the debug scene to " + DebugScenePath);
+                        return;
+                    }
+                    Debug.LogWarning("[Edgewise] MoveAsset failed: " + err);
+                }
+            }
 
-            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-
+            var debug = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var cameraGo = new GameObject("Main Camera") { tag = "MainCamera" };
             var camera = cameraGo.AddComponent<Camera>();
             camera.orthographic = true;
@@ -124,17 +165,18 @@ namespace Edgewise.EditorTools
             camera.backgroundColor = new Color(0.08f, 0.09f, 0.13f);
             cameraGo.transform.position = new Vector3(0f, 0f, -10f);
             cameraGo.AddComponent<UniversalAdditionalCameraData>();
-
-            var debugGo = new GameObject("Debug Board");
-            debugGo.AddComponent<DebugBoardView>();
-
-            EditorSceneManager.SaveScene(scene, MainScenePath);
-            Debug.Log("[Edgewise] Created " + MainScenePath);
+            new GameObject("Debug Board").AddComponent<DebugBoardView>();
+            EditorSceneManager.SaveScene(debug, DebugScenePath);
+            Debug.Log("[Edgewise] Created " + DebugScenePath);
         }
 
         static void RegisterScenes()
         {
-            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(MainScenePath, true) };
+            EditorBuildSettings.scenes = new[]
+            {
+                new EditorBuildSettingsScene(MainScenePath, true),
+                new EditorBuildSettingsScene(DebugScenePath, true),
+            };
         }
     }
 }

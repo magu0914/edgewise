@@ -1,17 +1,29 @@
 {
-    "name": "Edgewise.Game",
-    "rootNamespace": "Edgewise.Game",
-    "references": [
-        "Edgewise.Core",
-        "Unity.InputSystem"
-    ],
-    "includePlatforms": [],
-    "excludePlatforms": [],
-    "allowUnsafeCode": false,
-    "overrideReferences": false,
-    "precompiledReferences": [],
-    "autoReferenced": true,
-    "defineConstraints": [],
-    "versionDefines": [],
-    "noEngineReferences": false
+    "name":  "Edgewise.Game",
+    "rootNamespace":  "Edgewise.Game",
+    "references":  [
+                       "Edgewise.Core",
+                       "Unity.InputSystem",
+                       "Unity.TextMeshPro",
+                       "UnityEngine.UI"
+                   ],
+    "includePlatforms":  [
+
+                         ],
+    "excludePlatforms":  [
+
+                         ],
+    "allowUnsafeCode":  false,
+    "overrideReferences":  false,
+    "precompiledReferences":  [
+
+                              ],
+    "autoReferenced":  true,
+    "defineConstraints":  [
+
+                          ],
+    "versionDefines":  [
+
+                       ],
+    "noEngineReferences":  false
 }

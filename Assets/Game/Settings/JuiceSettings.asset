@@ -1,0 +1,42 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 27b2114e8d7ad8840b39de195e286727, type: 3}
+  m_Name: JuiceSettings
+  m_EditorClassIdentifier: Edgewise.Game::Edgewise.Game.Juice.JuiceSettings
+  pickTime: 0.08
+  pickScale: 1.12
+  pickLift: 0.7
+  holdTiltDegrees: 5
+  holdWobbleHz: 1.1
+  hoverRaise: 0.16
+  placeMoveTime: 0.18
+  landSquashTime: 0.12
+  landSquash: {x: 1.12, y: 0.88}
+  landBurstTime: 0.35
+  flipTime: 0.25
+  flipStagger: 0.05
+  flipLift: 0.35
+  ruleLinkTime: 0.3
+  ruleBannerTime: 0.5
+  comboStepWait: 0.2
+  comboBannerTime: 0.45
+  rotateTime: 0.12
+  cpuMinThink: 0.4
+  infoBannerTime: 0.8
+  dealTime: 0.3
+  dealStagger: 0.04
+  scorePopTime: 0.2
+  scorePopScale: 1.4
+  resultCountStep: 0.09
+  resultTextTime: 0.45
+  previewGlow: 1
+  ghostAlpha: 0.45

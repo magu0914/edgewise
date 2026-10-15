@@ -9,7 +9,7 @@ namespace Edgewise.EditorTools
     /// <summary>
     /// batchmode からのビルド。例:
     ///   Unity -batchmode -quit -projectPath . -buildTarget WebGL -executeMethod Edgewise.EditorTools.BuildScript.BuildWebGL -logFile build.log
-    /// 出力先は Builds/WebGL（Main シーンのみ）。失敗したら終了コード 1 で Editor を終了する。
+    /// 出力先は Builds/WebGL（Main と Debug シーン）。失敗したら終了コード 1 で Editor を終了する。
     /// </summary>
     public static class BuildScript
     {
@@ -21,11 +21,12 @@ namespace Edgewise.EditorTools
             if (EditorUserBuildSettings.activeBuildTarget != BuildTarget.WebGL)
                 EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.WebGL, BuildTarget.WebGL);
 
-            if (!File.Exists(ProjectSetup.MainScenePath)) ProjectSetup.Run();
+            if (!File.Exists(ProjectSetup.MainScenePath) || !File.Exists(ProjectSetup.DebugScenePath)) ProjectSetup.Run();
 
+            // Main（ゲーム本体）を先頭に、Debug（CPU 対 CPU の計測。URL に ?bench を付けると開く）も含める
             var options = new BuildPlayerOptions
             {
-                scenes = new[] { ProjectSetup.MainScenePath },
+                scenes = new[] { ProjectSetup.MainScenePath, ProjectSetup.DebugScenePath },
                 locationPathName = WebGLOutput,
                 target = BuildTarget.WebGL,
                 targetGroup = BuildTargetGroup.WebGL,
