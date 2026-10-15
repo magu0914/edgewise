@@ -262,9 +262,9 @@ namespace Edgewise.EditorTools
             mat.SetFloat(ShaderUtilities.ID_WeightNormal, fa.normalStyle);
             mat.SetFloat(ShaderUtilities.ID_WeightBold, fa.boldStyle);
             mat.EnableKeyword(ShaderUtilities.Keyword_Outline);
-            mat.SetFloat(ShaderUtilities.ID_OutlineWidth, 0.22f);
+            mat.SetFloat(ShaderUtilities.ID_OutlineWidth, 0.3f);
             mat.SetColor(ShaderUtilities.ID_OutlineColor, new Color(0.02f, 0.02f, 0.06f, 1f));
-            mat.SetFloat(ShaderUtilities.ID_FaceDilate, 0.12f);
+            mat.SetFloat(ShaderUtilities.ID_FaceDilate, 0.2f);
             mat.EnableKeyword(ShaderUtilities.Keyword_Underlay);
             mat.SetColor(ShaderUtilities.ID_UnderlayColor, new Color(0f, 0f, 0f, 0.55f));
             mat.SetFloat(ShaderUtilities.ID_UnderlayOffsetY, -0.6f);

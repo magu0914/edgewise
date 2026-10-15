@@ -28,6 +28,16 @@ namespace Edgewise.Game.Match
 
         public IMatchFx Fx { get; set; } = NullMatchFx.Instance;
 
+        /// <summary>ワールド座標 → 画面上の点（文字演出をカードの上に出すのに使う）。null なら画面中央。</summary>
+        public Func<Vector3, Vector2> WorldToScreen { get; set; }
+
+        /// <summary>置いたカードの少し上（画面上の点）。</summary>
+        Vector2? AboveCell(int cell, float extra = 0f)
+        {
+            if (WorldToScreen == null || cell < 0) return null;
+            return WorldToScreen(_board.CellPosition(cell) + new Vector3(0f, CardView.Size.y * 0.5f + 0.18f + extra, 0f));
+        }
+
         /// <summary>最後に再生したステップ（テスト・デバッグ用）。</summary>
         public IReadOnlyList<PlaybackStep> LastSteps { get; private set; } = new List<PlaybackStep>();
 
@@ -55,6 +65,7 @@ namespace Edgewise.Game.Match
             IsPlaying = true;
             int placedCell = move.Cell;
             var links = new List<MeshRenderer>();
+            _banner.LocalScale = _juice.ruleTextScale;
             try
             {
                 foreach (var step in steps)
@@ -71,14 +82,15 @@ namespace Edgewise.Game.Match
                             break;
                         case StepKind.RuleBanner:
                             Fx.OnRule(step.Rule);
-                            await _banner.Show(RuleText(step.Rule), Theme.Gold, _juice.ruleBannerTime * Tf, ct);
+                            await _banner.Show(RuleText(step.Rule), Theme.Gold, _juice.ruleBannerTime * Tf, ct, null, 1f, AboveCell(placedCell));
                             FadeLinks(links);
                             break;
                         case StepKind.ComboBanner:
                             await Tweens.Delay(_juice.comboStepWait * Tf, ct);
                             Fx.OnCombo(step.ComboDepth);
+                            // 段が深いほど大きく
                             _banner.Play(ComboText(step.ComboDepth), new Color(1f, 0.62f, 0.85f), _juice.comboBannerTime * Tf, null,
-                                1f + 0.08f * (step.ComboDepth - 1));
+                                1f + _juice.comboTextGrowth * (step.ComboDepth - 1), AboveCell(placedCell));
                             break;
                         case StepKind.FlipGroup:
                             await FlipGroupAsync(step, ct);
@@ -207,6 +219,18 @@ namespace Edgewise.Game.Match
             }, Ease.Linear);
         }
 
+        /// <summary>裏返った瞬間の光（白い光と光の輪）。連鎖の段が深いほど強く大きくする。</summary>
+        void FlipLight(CardView card, FlipStep f, float tf)
+        {
+            if (tf <= 0f) return;
+            float boost = 1f + _juice.comboLightPerDepth * f.ChainDepth;
+            Tweens.Play(_juice.flipFlashTime * tf, k => card.SetFlash((1f - k) * Mathf.Min(1f, 0.6f * boost)), Ease.OutQuad, 0f, card, "flash");
+            var burst = _board.NextBurst(f.Cell);
+            var color = Theme.OwnerColor(f.To) * boost;
+            float size = 1f + 0.25f * f.ChainDepth;
+            Tweens.Play(_juice.landBurstTime * tf, k => _board.SetBurst(burst, color, k, size), Ease.OutQuad);
+        }
+
         async Awaitable FlipGroupAsync(PlaybackStep step, CancellationToken ct)
         {
             float tf = Tf;
@@ -237,6 +261,7 @@ namespace Edgewise.Game.Match
                         _hud.AddScore(to, +1, _juice, tf);
                         _hud.AddScore(to.Opponent(), -1, _juice, tf);
                         Fx.OnFlip(f.Cell, to, f.IndexInMove, f.ChainDepth);
+                        FlipLight(card, f, tf);
                     }
                     if (k > 0f && k < 1f) card.SetOrder(order);
                     float a = swapped ? angle - 180f : angle;

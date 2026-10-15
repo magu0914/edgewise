@@ -31,6 +31,7 @@ namespace Edgewise.Game.App
         [SerializeField] BannerView banner;
         [SerializeField] MatchController match;
         [SerializeField] FpsMeter fps;
+        [SerializeField] SettingsPanel settings;
 
         MatchSettings _settings;
         MatchSettings _last;
@@ -45,14 +46,16 @@ namespace Edgewise.Game.App
         public HudView Hud => hud;
         public MenuPanel Menu => menu;
         public FpsMeter Fps => fps;
+        public SettingsPanel Settings => settings;
         public MatchOutcome LastOutcome { get; private set; }
 
         /// <summary>結果画面のボタンが押せる状態になったか（テスト用）。</summary>
         public bool ResultReady { get; private set; }
 
         public void Wire(GameAssets a, GameObject tableRoot, TitleScreen t, SetupScreen s, HudView h, MenuPanel m, ResultScreen r, BannerView b,
-            MatchController mc, FpsMeter f)
+            MatchController mc, FpsMeter f, SettingsPanel sp)
         {
+            settings = sp;
             assets = a;
             table = tableRoot;
             title = t;
@@ -82,6 +85,19 @@ namespace Edgewise.Game.App
             hud.RotatePressed += dir => Controls.Rotate(dir);
             menu.ResignPressed += () => match.Resign();
             menu.Closed += () => Controls.Blocked = false;
+            menu.SettingsPressed += () =>
+            {
+                // メニューを閉じずに（入力は止めたまま）設定を開き、閉じたらメニューに戻る
+                menu.gameObject.SetActive(false);
+                settings.Open();
+                AutomationLog.Buttons("Settings", settings.transform);
+            };
+            settings.Closed += () =>
+            {
+                if (match.State != null && match.IsRunning) menu.Open(match.State.Rules);
+                else Controls.Blocked = false;
+            };
+            hud.HintPressed += () => match.RequestHint();
             Controls.MenuRequested += OpenMenu;
             Controls.HoldingChanged += holding => hud.ShowRotateButtons(holding && Controls.CanRotate);
         }
@@ -100,7 +116,11 @@ namespace Edgewise.Game.App
         {
             // メニューは Esc でも閉じる
             var kb = UnityEngine.InputSystem.Keyboard.current;
-            if (kb != null && kb.escapeKey.wasPressedThisFrame && menu.IsOpen) menu.Close();
+            if (kb != null && kb.escapeKey.wasPressedThisFrame)
+            {
+                if (settings.IsOpen) settings.Close();
+                else if (menu.IsOpen) menu.Close();
+            }
         }
 
         void OnDestroy()
@@ -157,6 +177,7 @@ namespace Edgewise.Game.App
             setup.Hide();
             result.Hide();
             menu.gameObject.SetActive(false);
+            settings.gameObject.SetActive(false);
             banner.Hide();
             hud.SetVisible(false);
             hud.ShowRotateButtons(false);
@@ -219,7 +240,10 @@ namespace Edgewise.Game.App
                     AutomationLog.Write("fps-match avg " + fps.AverageFps.ToString("0.0", CultureInfo.InvariantCulture) + " worst "
                         + fps.WorstFrameMs.ToString("0", CultureInfo.InvariantCulture) + "ms");
                 hud.ShowRotateButtons(false);
-                await result.Show(outcome.Score, outcome.Result, outcome.Resigned, assets.juice, UserPrefs.TimeFactor, ct);
+                // 決着: 盤のカードが勝者の色に順に光る → スコアのカウントアップ → 勝敗の文字（と勝ち・負け・引き分けの音）
+                await match.PlayFinaleAsync(outcome, ct);
+                await result.Show(outcome.Score, outcome.Result, outcome.Resigned, assets.juice, UserPrefs.TimeFactor, ct,
+                    () => match.Fx.OnEnd(outcome.Result), _ => match.Fx.OnCursorMove());
                 ResultReady = true;
                 AutomationLog.Buttons("Result", result.transform);
             }
@@ -234,7 +258,7 @@ namespace Edgewise.Game.App
 
         void OpenMenu()
         {
-            if (match.State == null || !match.IsRunning || menu.IsOpen) return;
+            if (match.State == null || !match.IsRunning || menu.IsOpen || settings.IsOpen) return;
             Controls.Cancel();
             Controls.Blocked = true;
             menu.Open(match.State.Rules);

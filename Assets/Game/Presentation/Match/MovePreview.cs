@@ -21,8 +21,21 @@ namespace Edgewise.Game.Match
         public bool SameWall { get; }
         public bool Plus { get; }
 
-        MovePreview(Move move, List<int> flips, List<int> combo, bool same, bool sameWall, bool plus)
+        readonly List<int> _from;
+
+        /// <summary>cell を裏返す起点のマス（置くマス、または Combo の連鎖元）。裏返らないなら -1。</summary>
+        public int FromOf(int cell)
         {
+            for (int i = 0; i < FlipCells.Count; i++)
+            {
+                if (FlipCells[i] == cell) return _from[i];
+            }
+            return -1;
+        }
+
+        MovePreview(Move move, List<int> flips, List<int> from, List<int> combo, bool same, bool sameWall, bool plus)
+        {
+            _from = from;
             Move = move;
             FlipCells = flips;
             ComboCells = combo;
@@ -46,6 +59,7 @@ namespace Edgewise.Game.Match
             if (state == null || !GameEngine.IsLegalMove(state, move)) return null;
             var result = GameEngine.ApplyMove(state, move);
             var flips = new List<int>();
+            var from = new List<int>();
             var combo = new List<int>();
             bool same = false, sameWall = false, plus = false;
             foreach (var e in result.Events)
@@ -53,6 +67,7 @@ namespace Edgewise.Game.Match
                 if (e is FlipEvent f)
                 {
                     flips.Add(f.Cell);
+                    from.Add(f.From);
                     if (f.Cause == FlipCause.Combo) combo.Add(f.Cell);
                 }
                 else if (e is RuleEvent r)
@@ -62,7 +77,7 @@ namespace Edgewise.Game.Match
                     else if (r.Rule == RuleHeading.Plus) plus = true;
                 }
             }
-            return new MovePreview(move, flips, combo, same, sameWall, plus);
+            return new MovePreview(move, flips, from, combo, same, sameWall, plus);
         }
     }
 }

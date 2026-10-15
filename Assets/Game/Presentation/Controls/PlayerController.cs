@@ -231,11 +231,15 @@ namespace Edgewise.Game.Controls
                 _board.HideBadges();
                 return;
             }
+            // 取れる予定のカード: 所有者の色は変えず、脈打つ光の縁取りと「取れる」矢印の印だけを出す
             foreach (int c in _preview.FlipCells)
             {
                 var card = _board.Placed[c];
                 if (card == null) continue;
-                card.SetGlow(_juice.previewGlow, color);
+                card.SetGlow(_juice.previewGlow, Theme.CaptureGlow);
+                int from = _preview.FromOf(c);
+                var d = _board.CellPosition(c) - _board.CellPosition(from >= 0 ? from : _hoverCell);
+                card.SetCaptureMark(d.sqrMagnitude > 1e-6f ? new Vector2(d.x, d.y).normalized : Vector2.up);
                 _glowing.Add(c);
             }
             string first = _preview.Same || _preview.SameWall ? Edgewise.Game.UI.UiText.BadgeSame : _preview.Plus ? Edgewise.Game.UI.UiText.BadgePlus : null;
@@ -251,7 +255,11 @@ namespace Edgewise.Game.Controls
             foreach (int c in _glowing)
             {
                 var card = _board.Placed[c];
-                if (card != null) card.SetGlow(0f, Color.white);
+                if (card != null)
+                {
+                    card.SetGlow(0f, Color.white);
+                    card.SetCaptureMark(Vector2.zero);
+                }
             }
             _glowing.Clear();
         }
@@ -276,6 +284,10 @@ namespace Edgewise.Game.Controls
             if (_board == null) return;
             if (_awaiting && !Blocked && _result == null)
             {
+                // 対戦中は UI のボタン（ヒント・回転など）にキーボードの選択を残さない。
+                // 残っていると Enter・矢印がボタンに取られて、キーボードで手札を操作できなくなる
+                var es = EventSystem.current;
+                if (es != null && es.currentSelectedGameObject != null) es.SetSelectedGameObject(null);
                 HandlePointer();
                 HandleKeyboard();
             }
@@ -322,7 +334,11 @@ namespace Edgewise.Game.Controls
                 case Mode.Idle:
                 {
                     int idx = _keyboardMode ? _hand.KeySelectIndex : _hand.HitTest(world);
-                    if (!_keyboardMode && !(pointer is Touchscreen)) _hand.SetHover(idx);
+                    if (!_keyboardMode && !(pointer is Touchscreen))
+                    {
+                        if (idx >= 0 && idx != _hand.HoverIndex) _fx.OnCursorMove();
+                        _hand.SetHover(idx);
+                    }
                     if (pressed && !overUi && idx >= 0)
                     {
                         _pressPos = pos;

@@ -22,6 +22,10 @@ namespace Edgewise.Game.View
         [SerializeField] Transform starfield;
 
         int _w, _h;
+        Vector3 _camBase;
+
+        /// <summary>画面の揺れのずれ（JuiceFx が毎フレーム設定する。カメラの位置に足す）。</summary>
+        public Vector2 ShakeOffset { get; set; }
 
         public bool Portrait { get; private set; }
 
@@ -48,6 +52,7 @@ namespace Edgewise.Game.View
         void LateUpdate()
         {
             if (Screen.width != _w || Screen.height != _h) Apply();
+            cam.transform.position = _camBase + new Vector3(ShakeOffset.x, ShakeOffset.y, 0f);
         }
 
         public void Apply()
@@ -75,13 +80,13 @@ namespace Edgewise.Game.View
             }
             else
             {
-                H = Mathf.Max(7.4f, 3.75f / aspect);
+                H = Mathf.Max(7.6f, 3.75f / aspect);
                 float halfH = H * 0.5f;
                 float halfW = halfH * aspect;
                 float hud = H * (92f / 1280f);
                 float top = halfH - hud - 0.05f;
                 const float cpuScale = 0.6f;
-                const float youScale = 0.78f;
+                const float youScale = 0.88f; // 縦画面の手札は数字が読めるように大きめ（少し重なってよい）
                 float content = CardView.Size.y * cpuScale + 0.08f + BoardView.BoardSize.y + 0.1f + CardView.Size.y * youScale + 0.7f;
                 float avail = top + halfH;
                 top -= Mathf.Max(0f, (avail - content) * 0.5f);
@@ -92,7 +97,7 @@ namespace Edgewise.Game.View
                 board.transform.position = new Vector3(0f, boardY, 0f);
                 float width = halfW * 2f - 0.12f;
                 ConfigureHand(hand1, new Vector3(0f, cpuY, 0f), false, Mathf.Min(0.66f, (width - cpuScale) / 4f), cpuScale, Vector3.down);
-                ConfigureHand(hand0, new Vector3(0f, youY, 0f), false, Mathf.Min(0.86f, (width - youScale) / 4f), youScale, Vector3.up);
+                ConfigureHand(hand0, new Vector3(0f, youY, 0f), false, Mathf.Min(0.92f, (width - youScale) / 4f), youScale, Vector3.up);
             }
 
             VisibleHeight = H;
@@ -101,7 +106,8 @@ namespace Edgewise.Game.View
             cam.fieldOfView = FieldOfView;
             cam.nearClipPlane = 0.3f;
             cam.farClipPlane = dist + 80f;
-            cam.transform.position = new Vector3(0f, 0f, -dist);
+            _camBase = new Vector3(0f, 0f, -dist);
+            cam.transform.position = _camBase;
             cam.transform.rotation = Quaternion.identity;
 
             if (starfield != null)

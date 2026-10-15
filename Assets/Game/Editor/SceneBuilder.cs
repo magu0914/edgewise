@@ -1,5 +1,7 @@
 using Edgewise.Core;
 using Edgewise.Game.App;
+using Edgewise.Game.Audio;
+using Edgewise.Game.Juice;
 using Edgewise.Game.Controls;
 using Edgewise.Game.Match;
 using Edgewise.Game.UI;
@@ -36,6 +38,7 @@ namespace Edgewise.EditorTools
             var camData = camGo.AddComponent<UniversalAdditionalCameraData>();
             camData.renderPostProcessing = true;
             camData.antialiasing = AntialiasingMode.None;
+            camGo.AddComponent<AudioListener>();
 
             var volGo = new GameObject("Global Volume");
             var vol = volGo.AddComponent<Volume>();
@@ -65,6 +68,10 @@ namespace Edgewise.EditorTools
             var player = game.AddComponent<PlayerController>();
             var match = game.AddComponent<MatchController>();
             var fps = game.AddComponent<FpsMeter>();
+            var sfx = game.AddComponent<SfxBank>();
+            sfx.Wire(assets.juice);
+            var juiceFx = game.AddComponent<JuiceFx>();
+            juiceFx.Wire(assets.juice, sfx, layout);
             var flow = game.AddComponent<AppFlow>();
 
             // ---- UI ----
@@ -92,6 +99,9 @@ namespace Edgewise.EditorTools
             result.Build(assets);
             var menu = MakeScreen<MenuPanel>("Menu", canvasGo.transform);
             menu.Build(assets);
+            var settings = MakeScreen<SettingsPanel>("Settings", canvasGo.transform);
+            settings.Build(assets);
+            settings.gameObject.SetActive(false);
             setup.gameObject.SetActive(false);
             hud.gameObject.SetActive(false);
             result.gameObject.SetActive(false);
@@ -102,11 +112,11 @@ namespace Edgewise.EditorTools
             var module = esGo.AddComponent<InputSystemUIInputModule>();
             module.AssignDefaultActions();
 
-            match.Wire(assets, board, hand0, hand1, hud, banner, layout, player, cards);
-            flow.Wire(assets, table, title, setup, hud, menu, result, banner, match, fps);
+            match.Wire(assets, board, hand0, hand1, hud, banner, layout, player, cards, juiceFx);
+            flow.Wire(assets, table, title, setup, hud, menu, result, banner, match, fps, settings);
             table.SetActive(false);
 
-            foreach (var c in new Component[] { layout, match, flow, board, hud, title, setup, result, menu, banner })
+            foreach (var c in new Component[] { layout, match, flow, board, hud, title, setup, result, menu, banner, settings, sfx, juiceFx })
                 EditorUtility.SetDirty(c);
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene, path);

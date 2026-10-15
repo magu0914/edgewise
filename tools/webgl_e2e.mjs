@@ -11,7 +11,8 @@ import { join, resolve } from 'node:path';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((a, v, i, arr) => (v.startsWith('--') ? [...a, [v.slice(2), arr[i + 1]]] : a), []));
 const BASE = args.url ?? 'http://127.0.0.1:8765/';
-const OUT = resolve(args.out ?? 'Logs/shots/3a');
+const OUT = resolve(args.out ?? 'Logs/shots/3b');
+const COMBO_SEEDS = (args['combo-seeds'] ?? '2,12,16,17,18').split(',');
 const SEED = args.seed ?? '7';
 const SLOW = args.slow ?? '4';
 const CHROME = args.chrome ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
@@ -178,9 +179,10 @@ async function keyboardMove(choice, turn) {
 }
 const results = { shots: [], fps: [], errors: [] };
 
-async function playMatch({ wantPreview, wantFlip, wantRule, wantPivot, wantKeyboard, wantMenu }) {
+async function playMatch({ wantPreview, wantFlip, wantRule, wantPivot, wantKeyboard, wantMenu, wantHint, wantCombo, alwaysSP }) {
   let moves = 0;
-  const got = { preview: !wantPreview, flip: !wantFlip, rule: !wantRule, pivot: !wantPivot, keyboard: !wantKeyboard, menu: !wantMenu };
+  const got = { preview: !wantPreview, flip: !wantFlip, rule: !wantRule, pivot: !wantPivot, keyboard: !wantKeyboard, menu: !wantMenu,
+    hint: !wantHint, combo: !wantCombo };
   while (true) {
     // 自分の手番か終局を待つ
     const start = cursor;
@@ -194,6 +196,12 @@ async function playMatch({ wantPreview, wantFlip, wantRule, wantPivot, wantKeybo
         const rb = consoleLines.slice(start).findIndex((l) => /^step RuleBanner/.test(l.line));
         if (rb >= 0) { await sleep(120 * Number(SLOW)); await shot('06_same_or_plus'); got.rule = true; }
       }
+      // COMBO ×2 以上の文字が出た瞬間を撮る（CPU の手でも自分の手でも）
+      if (!got.combo) {
+        const cb = consoleLines.slice(start).findIndex((l) => /^step ComboBanner x([2-9])/.test(l.line));
+        // ログは段の始まり（0.2 秒の待ちの前）に出るので、待ちと文字の弾みが終わるころに撮る
+        if (cb >= 0) { await sleep(300 * Number(SLOW)); await shot('11_combo_depth2'); got.combo = true; }
+      }
       if (end >= 0 && (aw < 0 || end < aw)) { cursor = start + end + 1; return { moves, got }; }
       if (aw >= 0) { cursor = start + aw; turn = await readTurn(); break; }
       if (Date.now() - t0 > 180000) throw new Error('timeout waiting for my turn');
@@ -202,7 +210,7 @@ async function playMatch({ wantPreview, wantFlip, wantRule, wantPivot, wantKeybo
     await sleep(150);
     // 手を選ぶ: Same/Plus（撮影用）→ 裏返す枚数が多い手 → 先頭
     let choice = null;
-    if (!got.rule) choice = turn.options.find((o) => o.same || o.plus);
+    if (!got.rule || alwaysSP) choice = turn.options.find((o) => o.same || o.plus);
     if (!choice) choice = [...turn.options].sort((a, b) => b.flips - a.flips)[0];
     const card = turn.hand[choice.h];
     const cell = turn.cells[choice.c];
@@ -216,9 +224,26 @@ async function playMatch({ wantPreview, wantFlip, wantRule, wantPivot, wantKeybo
       await click(...Object.values(uiRect('Menu', 'RulesButton', mAt)));
       await sleep(400);
       await shot('x_menu');
+      // 設定（速度・効果音の音量とミュート・画面の揺れ）
+      await click(...Object.values(uiRect('Menu', 'SettingsButton', mAt)));
+      const sAt = (await waitLine(/^screen Settings/, 5000)).index;
+      await sleep(400);
+      await shot('12_settings');
+      await click(...Object.values(uiRect('Settings', 'CloseButton', sAt)));
+      await sleep(300);
       await click(...Object.values(uiRect('Menu', 'CloseButton', mAt)));
       await sleep(300);
       got.menu = true;
+    }
+    if (!got.hint && moves === 2) {
+      // ヒント: ボタンを押すと最善手のカードとマスが光り、「予想 a-b」が出る
+      const hb = consoleLines.length;
+      await click(...Object.values(uiRect('Hud', 'HintButton')));
+      const h = await waitLine(/^hint (\d+):(\d+) r(\d) (\d+)-(\d+)/, 30000, hb);
+      log('hint', h.line);
+      await sleep(600);
+      await shot('10_hint');
+      got.hint = true;
     }
     if (wantKeyboard && !got.keyboard && moves === 2) {
       // キーボード: ←→ で手札を選ぶ → Enter で持つ → 矢印でマス → Enter で置く
@@ -303,7 +328,7 @@ try {
   await shot('03_match_start');
 
   // 4〜6, 9. 1 局を最後まで（マウスで手札を置く）
-  let r = await playMatch({ wantPreview: true, wantFlip: true, wantRule: true, wantPivot: true, wantKeyboard: true, wantMenu: true });
+  let r = await playMatch({ wantPreview: true, wantFlip: true, wantRule: true, wantPivot: true, wantKeyboard: true, wantMenu: true, wantHint: true });
   log('match 1 finished', r.moves, 'moves', JSON.stringify(r.got));
 
   // 7. 結果画面
@@ -320,6 +345,24 @@ try {
     r = await playMatch({ wantRule: true });
     resultIndex = (await waitLine(/^screen Result/, 60000)).index;
     log('extra match', tries, JSON.stringify(r.got));
+  }
+
+  // 11. COMBO ×2 以上: ComboSeedFinder で見つけた seed で開き直し、同じ方針（Same/Plus → 枚数の多い手）で指す
+  for (const cs of COMBO_SEEDS) {
+    const navAt = consoleLines.length;
+    log('combo game, seed', cs);
+    await send('Page.navigate', { url: `${BASE}?log&seed=${cs}&slow=${SLOW}` });
+    const tAt = (await waitLine(/^screen Title/, 120000, navAt)).index;
+    await sleep(800);
+    await click(...Object.values(uiRect('Title', 'StartButton', tAt)));
+    const sAt2 = (await waitLine(/^screen Setup/, 10000, tAt)).index;
+    await sleep(300);
+    await click(...Object.values(uiRect('Setup', 'BeginButton', sAt2)));
+    await waitLine(/^match seed=/, 10000, sAt2);
+    const rc = await playMatch({ wantCombo: true, alwaysSP: true });
+    resultIndex = (await waitLine(/^screen Result/, 60000)).index;
+    log('combo game finished', JSON.stringify(rc.got));
+    if (rc.got.combo) break;
   }
 
   // 8. 縦画面 360x640 で対戦中
@@ -349,6 +392,21 @@ try {
   await waitLine(/^await turn=/, 120000);
   await sleep(500);
   await shot('08_portrait_360x640');
+
+  // 13. 縦画面の手札を拡大（数字の読みやすさの確認。360x640 の実際の画素を 3 倍に拡大）
+  {
+    let ys = [];
+    for (let i = consoleLines.length - 1; i >= 0; i--) {
+      const l = consoleLines[i].line;
+      const m = l.match(/^hand \d+ (-?\d+) (-?\d+)/);
+      if (m) ys.push(+m[2]);
+      if (/^await turn=/.test(l)) break;
+    }
+    const cy = ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : 560;
+    const r2 = await send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: Math.max(0, cy - 56), width: 360, height: 112, scale: 3 } });
+    writeFileSync(join(OUT, '13_card_closeup.png'), Buffer.from(r2.data, 'base64'));
+    log('shot 13_card_closeup');
+  }
 
   results.fps = consoleLines.filter((l) => /^fps/.test(l.line)).map((l) => l.line);
 } catch (e) {

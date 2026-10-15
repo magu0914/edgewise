@@ -18,6 +18,7 @@ namespace Edgewise.Game.View
         [SerializeField] MeshRenderer[] elementRings = new MeshRenderer[9];
         [SerializeField] TextMeshPro[] elementGlyphs = new TextMeshPro[9];
         [SerializeField] MeshRenderer cursor;
+        [SerializeField] MeshRenderer hintMarker;
         [SerializeField] MeshRenderer[] links = new MeshRenderer[4];
         [SerializeField] MeshRenderer[] bursts = new MeshRenderer[3];
         [SerializeField] TextMeshPro[] badges = new TextMeshPro[2];
@@ -74,13 +75,15 @@ namespace Edgewise.Game.View
 
             cursor = Quad("Cursor", assets, assets.shapeMaterial, Vector3.zero, new Vector2(1.1f, 1.35f), -380);
             cursor.gameObject.SetActive(false);
+            hintMarker = Quad("HintMarker", assets, assets.shapeMaterial, Vector3.zero, new Vector2(1.16f, 1.41f), -381);
+            hintMarker.gameObject.SetActive(false);
             links = new MeshRenderer[4];
             for (int i = 0; i < links.Length; i++)
             {
                 links[i] = Quad("Link" + i, assets, assets.shapeMaterial, Vector3.zero, new Vector2(1f, 0.2f), 900);
                 links[i].gameObject.SetActive(false);
             }
-            bursts = new MeshRenderer[3];
+            bursts = new MeshRenderer[9];
             for (int i = 0; i < bursts.Length; i++)
             {
                 bursts[i] = Quad("Burst" + i, assets, assets.shapeMaterial, Vector3.zero, new Vector2(2f, 2f), 910);
@@ -213,6 +216,24 @@ namespace Edgewise.Game.View
             Shape(cursor, c, 1f, new Vector2(1.1f, 1.35f), corner: 0.1f, softness: 0.025f, thickness: 0.022f, pulse: valid ? 1f : 0f);
         }
 
+        /// <summary>ヒントのマス（脈打つ枠）。cell = -1 で消す。</summary>
+        public void ShowHint(int cell, Color color)
+        {
+            if (hintMarker == null) return;
+            if (cell < 0)
+            {
+                hintMarker.gameObject.SetActive(false);
+                return;
+            }
+            hintMarker.gameObject.SetActive(true);
+            hintMarker.transform.localPosition = LocalCellPosition(cell) + new Vector3(0, 0, -0.003f);
+            var c = color * 1.8f;
+            c.a = 1f;
+            Shape(hintMarker, c, 1f, new Vector2(1.16f, 1.41f), corner: 0.12f, softness: 0.04f, thickness: 0.035f, pulse: 1f);
+        }
+
+        public bool HintVisible => hintMarker != null && hintMarker.gameObject.activeSelf;
+
         /// <summary>Same / Plus が成立した辺（置いたマスと cell の境目）に光の線を出す。index は線の番号（0..3）。</summary>
         public MeshRenderer ShowLink(int index, int placedCell, int cell, Color color)
         {
@@ -255,11 +276,11 @@ namespace Edgewise.Game.View
             return r;
         }
 
-        public void SetBurst(MeshRenderer r, Color color, float t)
+        public void SetBurst(MeshRenderer r, Color color, float t, float size = 1f)
         {
             var c = color * 2f;
             c.a = (1f - t) * 0.9f;
-            float radius = Mathf.Lerp(0.18f, 0.48f, t);
+            float radius = Mathf.Lerp(0.18f, 0.48f, t) * Mathf.Min(size, 1.04f);
             Shape(r, c, 2f, new Vector2(2f, 2f), thickness: Mathf.Lerp(0.02f, 0.05f, t), radius: radius);
             if (t >= 1f) r.gameObject.SetActive(false);
         }

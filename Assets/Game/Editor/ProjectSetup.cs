@@ -132,7 +132,7 @@ namespace Edgewise.EditorTools
             var webgl = UnityEditor.Build.NamedBuildTarget.WebGL;
             PlayerSettings.SetManagedStrippingLevel(webgl, ManagedStrippingLevel.Medium);
             PlayerSettings.SetIl2CppCodeGeneration(webgl, UnityEditor.Build.Il2CppCodeGeneration.OptimizeSize);
-            EditorUserBuildSettings.SetPlatformSettings(BuildPipeline.GetBuildTargetName(BuildTarget.WebGL), "CodeOptimization", "disksize");
+            EditorUserBuildSettings.SetPlatformSettings(BuildPipeline.GetBuildTargetName(BuildTarget.WebGL), "CodeOptimization", "disksizelto");
         }
 
         /// <summary>Phase 2 のデバッグ表示（DebugBoardView）のシーンを Debug.unity として残す。</summary>

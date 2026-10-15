@@ -85,6 +85,9 @@ namespace Edgewise.Game.UI
                 ruleNames[i] = UiKit.Label(b.transform, "Name", a, RuleNames[i], 22, Theme.Ink, TextAlignmentOptions.Left);
                 ruleNames[i].fontStyle = FontStyles.Bold;
                 ruleNames[i].textWrappingMode = TextWrappingModes.NoWrap;
+                ruleNames[i].enableAutoSizing = true;
+                ruleNames[i].fontSizeMin = 14;
+                ruleNames[i].fontSizeMax = 22;
                 ruleDescs[i] = UiKit.Label(b.transform, "Desc", a, RuleDescs[i], 16, Theme.InkDim, TextAlignmentOptions.Left);
                 ruleDescs[i].textWrappingMode = TextWrappingModes.NoWrap;
                 ruleDescs[i].enableAutoSizing = true;
@@ -178,9 +181,9 @@ namespace Edgewise.Game.UI
                     UiKit.Place((RectTransform)bandButtons[i].transform, top, new Vector2(lx - 170f + i * 170f, -270f), new Vector2(162f, 58f));
                 UiKit.Place((RectTransform)beginButton.transform, top, new Vector2(lx + 80f, -560f), new Vector2(300f, 80f));
                 UiKit.Place((RectTransform)backButton.transform, top, new Vector2(lx - 170f, -570f), new Vector2(160f, 60f));
-                float rx = 300f;
-                UiKit.Place(rulesLabel.rectTransform, top, new Vector2(rx, -100f), new Vector2(600f, 34f));
-                for (int i = 0; i < RuleCount; i++) LayoutRule(i, top, new Vector2(rx, -138f - i * 60f), new Vector2(600f, 54f));
+                float rx = 310f;
+                UiKit.Place(rulesLabel.rectTransform, top, new Vector2(rx, -100f), new Vector2(640f, 34f));
+                for (int i = 0; i < RuleCount; i++) LayoutRule(i, top, new Vector2(rx, -138f - i * 60f), new Vector2(640f, 54f));
             }
             else
             {
@@ -206,7 +209,7 @@ namespace Edgewise.Game.UI
             if (twoLines)
             {
                 var tl = new Vector2(0f, 1f);
-                ruleNames[i].fontSize = 26;
+                ruleNames[i].fontSizeMax = 26;
                 ruleDescs[i].fontSizeMax = 21;
                 ruleDescs[i].fontSizeMin = 15;
                 UiKit.Place(ruleNames[i].rectTransform, tl, tl, new Vector2(18f, -2f), new Vector2(size.x - 120f, 36f));
@@ -214,11 +217,12 @@ namespace Edgewise.Game.UI
             }
             else
             {
-                ruleNames[i].fontSize = 22;
+                ruleNames[i].fontSizeMax = 22;
                 ruleDescs[i].fontSizeMax = 16;
                 ruleDescs[i].fontSizeMin = 11;
-                UiKit.Place(ruleNames[i].rectTransform, left, new Vector2(0f, 0.5f), new Vector2(16f, 0f), new Vector2(170f, size.y));
-                UiKit.Place(ruleDescs[i].rectTransform, left, new Vector2(0f, 0.5f), new Vector2(186f, 0f), new Vector2(size.x - 186f - 86f, size.y));
+                // 名前の列は一番長い「Sudden Death」が入る幅にし、説明はその右から（重ならない）
+                UiKit.Place(ruleNames[i].rectTransform, left, new Vector2(0f, 0.5f), new Vector2(16f, 0f), new Vector2(196f, size.y));
+                UiKit.Place(ruleDescs[i].rectTransform, left, new Vector2(0f, 0.5f), new Vector2(222f, 0f), new Vector2(size.x - 222f - 90f, size.y));
             }
             ruleStates[i].fontSize = twoLines ? 26 : 20;
             UiKit.Place(ruleStates[i].rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-10f, 0f), new Vector2(80f, size.y - 14f));

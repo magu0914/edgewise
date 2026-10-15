@@ -28,6 +28,8 @@ namespace Edgewise.Game.UI
         [SerializeField] Button menuButton;
         [SerializeField] Button rotateLeft;
         [SerializeField] Button rotateRight;
+        [SerializeField] Button hintButton;
+        [SerializeField] TextMeshProUGUI hintLabel;
 
         readonly int[] _score = new int[2];
 
@@ -37,6 +39,11 @@ namespace Edgewise.Game.UI
 
         public event Action MenuPressed;
         public event Action<int> RotatePressed;
+        public event Action HintPressed;
+
+        public Button HintButton => hintButton;
+        public string HintText => hintLabel != null ? hintLabel.text : "";
+        public string TurnText => turnText != null ? turnText.text : "";
 
         public int Score(Player p) => _score[(int)p];
 
@@ -66,6 +73,10 @@ namespace Edgewise.Game.UI
             menuButton = UiKit.Button(root, "MenuButton", a, UiText.Menu, 20, out _);
             rotateLeft = UiKit.Button(root, "RotateLeft", a, UiText.RotateLeft, 22, out _);
             rotateRight = UiKit.Button(root, "RotateRight", a, UiText.RotateRight, 22, out _);
+            hintButton = UiKit.Button(root, "HintButton", a, UiText.Hint, 22, out hintLabel, new Color(0.16f, 0.36f, 0.44f));
+            hintLabel.enableAutoSizing = true;
+            hintLabel.fontSizeMin = 14;
+            hintLabel.fontSizeMax = 22;
             ApplyLayout(false);
         }
 
@@ -74,7 +85,9 @@ namespace Edgewise.Game.UI
             menuButton.onClick.AddListener(() => MenuPressed?.Invoke());
             rotateLeft.onClick.AddListener(() => RotatePressed?.Invoke(-1));
             rotateRight.onClick.AddListener(() => RotatePressed?.Invoke(+1));
+            hintButton.onClick.AddListener(() => HintPressed?.Invoke());
             ShowRotateButtons(false);
+            ShowHintButton(false);
         }
 
         public void ApplyLayout(bool portrait)
@@ -96,8 +109,10 @@ namespace Edgewise.Game.UI
                 UiKit.Place((RectTransform)turnPlate.transform, new Vector2(0.5f, 1f), new Vector2(0f, -6f), new Vector2(240f, 38f));
                 UiKit.Place((RectTransform)menuButton.transform, new Vector2(0.5f, 1f), new Vector2(0f, -48f), new Vector2(180f, 40f));
                 ((RectTransform)menuButton.transform).GetComponentInChildren<TextMeshProUGUI>().fontSize = 22;
-                UiKit.Place((RectTransform)rotateLeft.transform, new Vector2(0.5f, 0f), new Vector2(-95f, 18f), new Vector2(170f, 60f));
-                UiKit.Place((RectTransform)rotateRight.transform, new Vector2(0.5f, 0f), new Vector2(95f, 18f), new Vector2(170f, 60f));
+                // 縦画面: ヒントは左下、回転ボタンは右下（重ならないように）
+                UiKit.Place((RectTransform)rotateLeft.transform, new Vector2(1f, 0f), new Vector2(-176f, 18f), new Vector2(150f, 64f));
+                UiKit.Place((RectTransform)rotateRight.transform, new Vector2(1f, 0f), new Vector2(-16f, 18f), new Vector2(150f, 64f));
+                UiKit.Place((RectTransform)hintButton.transform, new Vector2(0f, 0f), new Vector2(16f, 18f), new Vector2(340f, 64f));
             }
             else
             {
@@ -106,6 +121,7 @@ namespace Edgewise.Game.UI
                 ((RectTransform)menuButton.transform).GetComponentInChildren<TextMeshProUGUI>().fontSize = 20;
                 UiKit.Place((RectTransform)rotateLeft.transform, new Vector2(0.5f, 0f), new Vector2(-90f, 6f), new Vector2(160f, 46f));
                 UiKit.Place((RectTransform)rotateRight.transform, new Vector2(0.5f, 0f), new Vector2(90f, 6f), new Vector2(160f, 46f));
+                UiKit.Place((RectTransform)hintButton.transform, new Vector2(0f, 0f), new Vector2(16f, 6f), new Vector2(300f, 46f));
             }
         }
 
@@ -178,5 +194,20 @@ namespace Edgewise.Game.UI
         }
 
         public void SetVisible(bool visible) => gameObject.SetActive(visible);
+
+        /// <summary>ヒントボタン（プレイヤーの手番だけ出す）。</summary>
+        public void ShowHintButton(bool show)
+        {
+            if (hintButton == null) return;
+            hintButton.gameObject.SetActive(show);
+            if (!show) SetHintText("");
+        }
+
+        /// <summary>ヒントボタンの文字（空ならボタン名、結果なら「予想 6-4（目安）」）。</summary>
+        public void SetHintText(string text)
+        {
+            if (hintLabel == null) return;
+            hintLabel.text = string.IsNullOrEmpty(text) ? UiText.Hint : text;
+        }
     }
 }

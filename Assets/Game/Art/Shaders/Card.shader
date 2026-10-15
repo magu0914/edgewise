@@ -22,6 +22,7 @@ Shader "Edgewise/Card"
         _Lift ("Lift", Float) = 0
         _Flash ("Flash", Float) = 0
         _Pivot ("Pivot Turns (0..3)", Float) = 0
+        _MarkDir ("Capture Mark Direction (xy, 0 = none)", Vector) = (0, 0, 0, 0)
         _QuadSize ("Quad Size", Vector) = (1.24, 1.49, 0, 0)
     }
 
@@ -57,6 +58,7 @@ Shader "Edgewise/Card"
             float _Lift;
             float _Flash;
             float _Pivot;
+            float4 _MarkDir;
             float4 _QuadSize;
             float4 _Stars[7];
 
@@ -129,12 +131,6 @@ Shader "Edgewise/Card"
                 float innerLine = (1.0 - _Pattern) * inside * saturate(1.0 - abs(d + 0.082) / 0.009);
                 acc = over(acc, owner, innerLine * 0.9);
 
-                // ランクの菱形の下地
-                float2 rc = p - float2(-0.24, 0.355);
-                float dd = (abs(rc.x) / 0.215 + abs(rc.y) / 0.24 - 1.0) * 0.16;
-                acc = over(acc, S(float3(0.015, 0.02, 0.05)), fill(dd) * 0.78);
-                float diaLine = saturate(1.0 - abs(dd) / 0.006);
-                acc = over(acc, owner * 0.8, diaLine * 0.7);
 
                 // 属性・系統のバッジ（丸）
                 float de = length(p - float2(0.335, 0.47)) - 0.092;
@@ -213,6 +209,11 @@ Shader "Edgewise/Card"
                     }
                 }
                 acc = over(acc, S(float3(1.0, 0.86, 0.52)) * 1.3, saturate(sparkle) * inside);
+
+                // ランクの下地: 濃いプレート（数字の下に線を通さない。縁だけ所有者の色）
+                float plate = sdRoundBox(p - float2(-0.235, 0.32), float2(0.205, 0.228), 0.07);
+                acc = over(acc, S(float3(0.012, 0.014, 0.03)), fill(plate) * 0.9);
+                acc = over(acc, owner * 0.75, saturate(1.0 - abs(plate) / 0.007) * 0.55);
                 return acc;
             }
 
@@ -260,8 +261,21 @@ Shader "Edgewise/Card"
                 if (_FaceDown > 0.5) acc = back(p, acc, inside, d);
                 else acc = face(p, acc, inside, d);
 
-                // 予告: 裏返る予定のカードの面もうっすら光らせる
-                acc = over(acc, _GlowColor.rgb * 1.4, inside * saturate(_Glow * pulse) * 0.28);
+                // 予告: 取れる予定のカードには「取れる」印（金の円の中に、置く位置からの向きの矢印）。所有者の色は変えない
+                if (dot(_MarkDir.xy, _MarkDir.xy) > 0.01)
+                {
+                    float2 mc = float2(0.04, -0.035);
+                    float2 m = p - mc;
+                    float disc = length(m) - 0.15;
+                    acc = over(acc, S(float3(0.03, 0.03, 0.06)), fill(disc) * 0.85);
+                    acc = over(acc, S(float3(1.0, 0.85, 0.45)) * (1.2 + 0.8 * pulse), saturate(1.0 - abs(disc) / 0.012));
+                    float2 dir = normalize(_MarkDir.xy);
+                    float2 lp = float2(dot(m, dir), dot(m, float2(-dir.y, dir.x)));
+                    float arrow = sdSegment(lp, float2(-0.075, 0.0), float2(0.07, 0.0));
+                    arrow = min(arrow, sdSegment(lp, float2(0.08, 0.0), float2(0.02, 0.055)));
+                    arrow = min(arrow, sdSegment(lp, float2(0.08, 0.0), float2(0.02, -0.055)));
+                    acc = over(acc, S(float3(1.0, 0.9, 0.55)) * (1.4 + 0.6 * pulse), fill(arrow - 0.017));
+                }
                 // 着地・裏返しの一瞬の白い光
                 acc = over(acc, float3(1.6, 1.6, 1.6), inside * saturate(_Flash) * 0.6);
 

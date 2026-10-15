@@ -41,6 +41,8 @@ namespace Edgewise.Game.View
         static readonly int FlashId = Shader.PropertyToID("_Flash");
         static readonly int QuadSizeId = Shader.PropertyToID("_QuadSize");
         static readonly int PivotId = Shader.PropertyToID("_Pivot");
+        static readonly int MarkDirId = Shader.PropertyToID("_MarkDir");
+        Vector2 _markDir;
 
         MaterialPropertyBlock _mpb;
         bool _dirty = true;
@@ -61,6 +63,12 @@ namespace Edgewise.Game.View
 
         public string CardId => Def?.Id;
 
+        /// <summary>ランクの菱形の中心と間隔（シェーダーのプレートと合わせる）。</summary>
+        public static readonly Vector2 RankCenter = new Vector2(-0.235f, 0.32f);
+        public const float RankStepX = 0.135f;
+        public const float RankStepY = 0.142f;
+        public const float RankFontSize = 2.35f;
+
         // ------------------------------------------------------------------
         // 生成（Editor の ProjectSetup がプレハブを作るときに呼ぶ。実行時は呼ばない）
         // ------------------------------------------------------------------
@@ -77,15 +85,22 @@ namespace Edgewise.Game.View
             body.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             body.receiveShadows = false;
 
-            // 原作と同じく左上に菱形（上・右・下・左）。シェーダーの菱形の下地と中心をそろえる
-            var rc = new Vector2(-0.24f, 0.355f);
-            const float rankSize = 2.05f;
-            var rankRect = new Vector2(0.2f, 0.2f);
+            // 原作と同じく左上に菱形（上・右・下・左）に並べる。下地はシェーダーの濃いプレート（中心をそろえる）。
+            // 小さく表示される縦画面の手札でも読めるように、太字＋暗い縁取りで大きめにし、4 つの間隔を空ける
+            var rc = RankCenter;
+            var rankRect = new Vector2(0.22f, 0.22f);
             ranks = new TextMeshPro[4];
-            ranks[0] = Text("RankTop", assets, rc + new Vector2(0f, 0.14f), rankSize, rankRect, assets.fontOutline);
-            ranks[1] = Text("RankRight", assets, rc + new Vector2(0.135f, 0f), rankSize, rankRect, assets.fontOutline);
-            ranks[2] = Text("RankBottom", assets, rc + new Vector2(0f, -0.14f), rankSize, rankRect, assets.fontOutline);
-            ranks[3] = Text("RankLeft", assets, rc + new Vector2(-0.135f, 0f), rankSize, rankRect, assets.fontOutline);
+            ranks[0] = Text("RankTop", assets, rc + new Vector2(0f, RankStepY), RankFontSize, rankRect, assets.fontOutline);
+            ranks[1] = Text("RankRight", assets, rc + new Vector2(RankStepX, 0f), RankFontSize, rankRect, assets.fontOutline);
+            ranks[2] = Text("RankBottom", assets, rc + new Vector2(0f, -RankStepY), RankFontSize, rankRect, assets.fontOutline);
+            ranks[3] = Text("RankLeft", assets, rc + new Vector2(-RankStepX, 0f), RankFontSize, rankRect, assets.fontOutline);
+            foreach (var r in ranks)
+            {
+                r.fontStyle = FontStyles.Bold;
+                r.horizontalAlignment = HorizontalAlignmentOptions.Center;
+                r.verticalAlignment = VerticalAlignmentOptions.Geometry;
+                r.color = Color.white;
+            }
             elementText = Text("Element", assets, new Vector2(0.335f, 0.47f), 1.3f, new Vector2(0.2f, 0.2f), null);
             tribeText = Text("Tribe", assets, new Vector2(0.335f, 0.255f), 1.05f, new Vector2(0.18f, 0.18f), null);
             nameText = Text("Name", assets, new Vector2(-0.045f, -0.525f), 1.15f, new Vector2(0.78f, 0.16f), null);
@@ -176,6 +191,14 @@ namespace Edgewise.Game.View
             if (Mathf.Approximately(_glow, amount) && _glowColor == color) return;
             _glow = amount;
             _glowColor = color;
+            _dirty = true;
+        }
+
+        /// <summary>予告の「取れる」印。dir は置く位置からこのカードへの向き（ゼロで消す）。</summary>
+        public void SetCaptureMark(Vector2 dir)
+        {
+            if (_markDir == dir) return;
+            _markDir = dir;
             _dirty = true;
         }
 
@@ -286,6 +309,7 @@ namespace Edgewise.Game.View
                 _mpb.SetFloat(LevelId, Def.Level);
                 _mpb.SetFloat(EmblemRotId, _emblemRot);
                 _mpb.SetFloat(PivotId, Rotation);
+                _mpb.SetVector(MarkDirId, new Vector4(_markDir.x, _markDir.y, 0f, 0f));
             }
             else
             {

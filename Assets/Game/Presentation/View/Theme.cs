@@ -22,6 +22,12 @@ namespace Edgewise.Game.View
         public static readonly Color ButtonText = new Color(0.94f, 0.95f, 1f);
         public static readonly Color Dim = new Color(0f, 0f, 0.02f, 0.62f);
 
+        /// <summary>予告で「取れる」カードの光（所有者の色とは別の、金白色）。</summary>
+        public static readonly Color CaptureGlow = new Color(1f, 0.88f, 0.55f);
+
+        /// <summary>ヒントの光（水色がかった白）。</summary>
+        public static readonly Color HintGlow = new Color(0.6f, 0.95f, 1f);
+
         /// <summary>プレイヤーのマーク（◆）と CPU のマーク（●）。</summary>
         public const string MarkP0 = "◆";
         public const string MarkP1 = "●";

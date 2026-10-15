@@ -67,6 +67,16 @@ namespace Edgewise.Game.Tweening
         /// </summary>
         public static float TimeScale = 1f;
 
+        static float _stopRemaining;
+
+        /// <summary>ヒットストップ: 実時間で seconds 秒、すべての Tween（と Tweens.Delay）を止める。重なったら長い方。</summary>
+        public static void HitStop(float seconds)
+        {
+            if (seconds > _stopRemaining) _stopRemaining = seconds;
+        }
+
+        public static bool IsStopped => _stopRemaining > 0f;
+
         /// <summary>1 フレームで進める時間の上限（ヒッチで演出が飛ばないように）。</summary>
         const float MaxStep = 0.1f;
 
@@ -105,6 +115,11 @@ namespace Edgewise.Game.Tweening
         void Update()
         {
             float dt = Mathf.Min(Time.unscaledDeltaTime, MaxStep) * TimeScale;
+            if (_stopRemaining > 0f)
+            {
+                _stopRemaining -= Time.unscaledDeltaTime;
+                dt = 0f;
+            }
             if (_added.Count > 0)
             {
                 _active.AddRange(_added);

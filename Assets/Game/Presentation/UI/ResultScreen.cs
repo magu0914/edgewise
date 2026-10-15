@@ -81,7 +81,7 @@ namespace Edgewise.Game.UI
 
         /// <summary>結果を出す。席 0（プレイヤー）から見た勝敗。</summary>
         public async Awaitable Show((int P0, int P1) score, GameResult result, bool resigned, JuiceSettings juice, float timeFactor,
-            CancellationToken ct)
+            CancellationToken ct, Action onReveal = null, Action<int> onTick = null)
         {
             gameObject.SetActive(true);
             resultText.text = "";
@@ -98,6 +98,7 @@ namespace Edgewise.Game.UI
             {
                 if (i <= score.P0) score0.text = i.ToString();
                 if (i <= score.P1) score1.text = i.ToString();
+                if (timeFactor > 0f) onTick?.Invoke(i);
                 await Tweens.Delay(juice.resultCountStep * timeFactor, ct);
             }
             score0.text = score.P0.ToString();
@@ -105,6 +106,7 @@ namespace Edgewise.Game.UI
 
             string label = result == GameResult.P0 ? UiText.Win : result == GameResult.P1 ? UiText.Lose : UiText.Draw;
             resultText.text = label;
+            onReveal?.Invoke();
             resultText.color = result == GameResult.P0 ? Theme.Gold : result == GameResult.P1 ? new Color(0.75f, 0.55f, 0.65f) : Theme.Ink;
             var rt = resultText.rectTransform;
             await Tweens.Run(juice.resultTextTime * timeFactor, k => rt.localScale = Vector3.one * Mathf.LerpUnclamped(0.3f, 1f, k), ct,

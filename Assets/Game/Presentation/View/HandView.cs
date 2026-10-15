@@ -124,6 +124,16 @@ namespace Edgewise.Game.View
             Layout(true);
         }
 
+        /// <summary>CPU が考えている間の演出: index のカードを盤の方向へ amount だけ浮かせる（毎フレーム呼ぶ）。</summary>
+        public void Bob(int index, float amount)
+        {
+            if (index < 0 || index >= Cards.Count || Cards[index] == null) return;
+            var card = Cards[index];
+            card.transform.position = SlotPosition(index) + HoverDirection * amount + new Vector3(0f, 0f, -amount);
+            card.SetLift(Mathf.Clamp01(amount * 3f));
+            card.SetOrder(amount > 0.01f ? 45 : BaseOrder(index));
+        }
+
         /// <summary>handIndex のカードを手札から外して返す（並べ直しはしない）。</summary>
         public CardView TakeAt(int index)
         {

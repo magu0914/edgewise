@@ -4,6 +4,7 @@ using System.Threading;
 using Edgewise.Core;
 using Edgewise.Core.Data;
 using Edgewise.Game.AI;
+using Edgewise.Game.Audio;
 using Edgewise.Game.App;
 using Edgewise.Game.Controls;
 using Edgewise.Game.Juice;
@@ -39,12 +40,15 @@ namespace Edgewise.Game.Match
         [SerializeField] TableLayout layout;
         [SerializeField] PlayerController player;
         [SerializeField] Transform cardRoot;
+        [SerializeField] JuiceFx fx;
 
         readonly List<CardView> _pool = new List<CardView>();
         readonly AiDriver _ai = new AiDriver();
         EventPlayer _eventPlayer;
         uint _rng;
         bool _resignRequested;
+        readonly HintEngine _hint = new HintEngine();
+        bool _hintShown;
 
         public GameState State { get; private set; }
         public MatchSettings Settings { get; private set; }
@@ -55,9 +59,17 @@ namespace Edgewise.Game.Match
         public bool IsRunning { get; private set; }
         public bool CpuThinking { get; private set; }
         public int MovesPlayed { get; private set; }
+        public IMatchFx Fx => fx != null ? (IMatchFx)fx : NullMatchFx.Instance;
+        public JuiceFx JuiceFx => fx;
+        public HintEngine Hint => _hint;
 
-        public void Wire(GameAssets a, BoardView b, HandView h0, HandView h1, HudView h, BannerView bn, TableLayout l, PlayerController p, Transform cards)
+        /// <summary>直近に表示したヒント（テスト用）。</summary>
+        public HintResult? ShownHint { get; private set; }
+
+        public void Wire(GameAssets a, BoardView b, HandView h0, HandView h1, HudView h, BannerView bn, TableLayout l, PlayerController p, Transform cards,
+            JuiceFx juiceFx)
         {
+            fx = juiceFx;
             assets = a;
             board = b;
             hand0 = h0;
@@ -76,8 +88,67 @@ namespace Edgewise.Game.Match
 
         void Awake()
         {
-            player.Configure(board, hand0, layout, Juice, NullMatchFx.Instance);
-            _eventPlayer = new EventPlayer(board, new[] { hand0, hand1 }, hud, banner, Juice, () => UserPrefs.TimeFactor);
+            player.Configure(board, hand0, layout, Juice, Fx);
+            _eventPlayer = new EventPlayer(board, new[] { hand0, hand1 }, hud, banner, Juice, () => UserPrefs.TimeFactor)
+            {
+                Fx = Fx,
+                WorldToScreen = w => layout.TableToScreen(w),
+            };
+        }
+
+        void Update()
+        {
+            if (!_hint.IsRunning) return;
+            if (State == null || !ReferenceEquals(_hint.State, State) || !player.IsAwaitingMove)
+            {
+                _hint.Cancel();
+                return;
+            }
+            if (_hint.Tick(Juice.hintFrameBudgetMs)) ShowHint(_hint.Result);
+        }
+
+        // ------------------------------------------------------------------
+        // ヒント（DESIGN §8-1 操作: ボタン 1 つで AnalyzeMoves を回し、最善手のカードとマスを光らせて「予想 6-4」）
+        // ------------------------------------------------------------------
+
+        /// <summary>プレイヤーの手番ならヒントの探索を始める（数フレームに分けて読む）。</summary>
+        public bool RequestHint()
+        {
+            if (State == null || !player.IsAwaitingMove || _hint.IsRunning) return false;
+            ClearHint();
+            _hint.Begin(State, State.Turn, Juice.hintNodeBudget, 0x48494e54L + MovesPlayed);
+            hud.SetHintText(UiText.HintThinking);
+            if (AutomationLog.Enabled) AutomationLog.Write("hint begin");
+            return true;
+        }
+
+        void ShowHint(HintResult r)
+        {
+            ShownHint = r;
+            _hintShown = true;
+            var hand = Hand(State.Turn);
+            if (r.Move.HandIndex < hand.Cards.Count) hand.Cards[r.Move.HandIndex].SetGlow(1f, Theme.HintGlow);
+            board.ShowHint(r.Move.Cell, Theme.HintGlow);
+            string text = UiText.HintForecast + " " + r.Mine + "-" + r.Theirs + (r.Exact ? UiText.HintExact : UiText.HintApprox);
+            if (r.Move.Rotation != 0) text += "・" + (r.Move.Rotation * 90) + "°" + UiText.HintRotate;
+            hud.SetHintText(text);
+            if (AutomationLog.Enabled)
+            {
+                AutomationLog.Write("hint " + r.Move.HandIndex + ":" + r.Move.Cell + " r" + r.Move.Rotation + " " + r.Mine + "-" + r.Theirs + (r.Exact ? " exact" : " approx"));
+                AutomationLog.Write("cell-hint " + r.Move.Cell);
+            }
+        }
+
+        void ClearHint()
+        {
+            _hint.Cancel();
+            hud.SetHintText("");
+            if (!_hintShown) return;
+            _hintShown = false;
+            foreach (var h in new[] { hand0, hand1 })
+                foreach (var card in h.Cards)
+                    if (card != null) card.SetGlow(0f, Color.white);
+            board.ShowHint(-1, Color.white);
         }
 
         /// <summary>降参する（CPU の手番なら、その手の再生後に終える）。</summary>
@@ -113,7 +184,18 @@ namespace Edgewise.Game.Match
                     if (settings.Seat(turn) == SeatKind.Human)
                     {
                         hud.SetTurn(UiText.YourTurn, Theme.OwnerColor(turn));
-                        var r = await player.WaitForMoveAsync(State, turn, ct);
+                        hud.ShowHintButton(true);
+                        AutomationLog.Buttons("Hud", hud.transform);
+                        Move? r;
+                        try
+                        {
+                            r = await player.WaitForMoveAsync(State, turn, ct);
+                        }
+                        finally
+                        {
+                            hud.ShowHintButton(false);
+                            ClearHint();
+                        }
                         if (r == null)
                         {
                             resigned = true;
@@ -143,6 +225,7 @@ namespace Edgewise.Game.Match
                 }
 
                 UpdateHud();
+                hud.SetTurn(UiText.MatchOver, Theme.Ink);
                 var score = GameEngine.Score(State);
                 var outcome = new MatchOutcome
                 {
@@ -151,7 +234,6 @@ namespace Edgewise.Game.Match
                     Resigned = resigned,
                     Moves = MovesPlayed,
                 };
-                _eventPlayer.Fx.OnEnd(outcome.Result);
                 if (AutomationLog.Enabled) AutomationLog.Write("end " + score.P0 + "-" + score.P1 + " " + outcome.Result.ToId() + (resigned ? " resigned" : ""));
                 return outcome;
             }
@@ -170,15 +252,72 @@ namespace Edgewise.Game.Match
                 long seed = Rng.NextUInt32(_rng, out _rng);
                 _ai.Begin(State, State.Turn, Settings.ProfileFor(State.Turn), seed, CardCatalog.All);
                 float start = Time.unscaledTime;
-                while (!_ai.Tick()) await Awaitable.NextFrameAsync(ct);
                 float min = Juice.cpuMinThink * Tf;
-                while (Time.unscaledTime - start < min) await Awaitable.NextFrameAsync(ct);
+                // 考えている間、手札の 1 枚がふわっと浮いたり戻ったりする（1 回ごとに別のカードへ）
+                var hand = Hand(State.Turn);
+                bool bob = Tf > 0f && hand.Cards.Count > 0;
+                int bobIndex = -1;
+                float bobT = 0f;
+                uint bobRng = (uint)(MovesPlayed * 2654435761L + 12345);
+                bool done = _ai.Tick();
+                while (!done || Time.unscaledTime - start < min)
+                {
+                    if (bob)
+                    {
+                        float period = Mathf.Max(0.2f, Juice.cpuBobPeriod);
+                        if (bobIndex < 0 || bobT >= period)
+                        {
+                            if (bobIndex >= 0) hand.Bob(bobIndex, 0f);
+                            int n = hand.Cards.Count;
+                            int next = Rng.NextInt(bobRng, n, out bobRng);
+                            if (n > 1 && next == bobIndex) next = (next + 1) % n;
+                            bobIndex = next;
+                            bobT = 0f;
+                        }
+                        hand.Bob(bobIndex, Juice.cpuBobHeight * Mathf.Sin(Mathf.PI * bobT / period));
+                        bobT += Time.unscaledDeltaTime;
+                    }
+                    await Awaitable.NextFrameAsync(ct);
+                    if (!done) done = _ai.Tick();
+                }
+                if (bob)
+                {
+                    if (bobIndex >= 0) hand.Bob(bobIndex, 0f);
+                    hand.Layout(true, Tf);
+                }
                 return _ai.BestMove;
             }
             finally
             {
                 CpuThinking = false;
             }
+        }
+
+        /// <summary>
+        /// 決着の演出: 盤上のカードが勝者の色に順に光る（引き分けは金色）。結果画面（カウントアップ → 勝敗の文字）の前に再生する。
+        /// </summary>
+        public async Awaitable PlayFinaleAsync(MatchOutcome outcome, CancellationToken ct)
+        {
+            float tf = Tf;
+            bool draw = outcome.Result == GameResult.Draw;
+            var winner = outcome.Result == GameResult.P1 ? Player.P1 : Player.P0;
+            var color = draw ? Theme.Gold : Theme.OwnerColor(winner);
+            int lit = 0;
+            for (int c = 0; c < board.Placed.Length; c++)
+            {
+                var card = board.Placed[c];
+                if (card == null || (!draw && card.Owner != winner)) continue;
+                card.SetGlow(1f, color);
+                if (tf > 0f)
+                {
+                    var cv = card;
+                    Tweens.Play(0.25f * tf, k => cv.SetFlash((1f - k) * 0.8f), Ease.OutQuad, 0f, cv, "flash");
+                    SfxBank.Instance?.Play(Edgewise.Game.Audio.SfxKind.Cursor, lit);
+                    lit++;
+                    await Tweens.Delay(Juice.finaleStep * tf, ct);
+                }
+            }
+            await Tweens.Delay(Juice.finaleHold * tf, ct);
         }
 
         bool FaceDown(Player p) =>
@@ -222,6 +361,7 @@ namespace Edgewise.Game.Match
                     card.Bind(State.Cards[ids[i]], who, 0, FaceDown(who));
                     card.SetModifier(0);
                     card.SetGlow(0f, Color.white);
+                    card.SetCaptureMark(Vector2.zero);
                     card.SetSelect(0f);
                     card.SetAlpha(1f);
                     card.SetLift(0f);

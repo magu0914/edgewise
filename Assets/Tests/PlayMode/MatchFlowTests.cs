@@ -82,6 +82,98 @@ namespace Edgewise.Tests.PlayMode
                 Assert.That(view.CardId, Is.EqualTo(state.Board[c].Value.CardId));
             }
             Assert.That(_app.Hud.Score(Player.P0), Is.EqualTo(outcome.Score.P0));
+            Assert.That(_app.Hud.TurnText, Is.EqualTo("対戦終了"), "the turn display changes after the end");
+        }
+
+        /// <summary>ヒント: プレイヤーの手番にボタン 1 つで最善手を出し、そのカードとマスを光らせて「予想 a-b」を出す。</summary>
+        [UnityTest]
+        public IEnumerator HintShowsALegalMoveAndCanBePlayed()
+        {
+            _app.StartMatch(new MatchSettings { seat0 = SeatKind.Human, seat1 = SeatKind.Cpu, difficulty = Difficulty.Easy, open = false, pivot = true, seed = 21 });
+            var pc = _app.Controls;
+            int hinted = 0;
+            float t = 0f;
+            while (!_app.ResultReady && t < TimeoutSeconds)
+            {
+                t += Time.unscaledDeltaTime;
+                if (pc.IsAwaitingMove && hinted < 2)
+                {
+                    Assert.That(_app.Match.RequestHint(), Is.True);
+                    float w = 0f;
+                    while (_app.Match.Hint.IsRunning && w < 30f)
+                    {
+                        w += Time.unscaledDeltaTime;
+                        yield return null;
+                    }
+                    var hint = _app.Match.ShownHint;
+                    Assert.That(hint.HasValue, Is.True);
+                    var state = pc.State;
+                    Assert.That(GameEngine.IsLegalMove(state, hint.Value.Move), Is.True);
+                    Assert.That(_app.Match.Board.HintVisible, Is.True);
+                    Assert.That(_app.Hud.HintText, Does.StartWith("予想 " + hint.Value.Mine + "-" + hint.Value.Theirs));
+                    Assert.That(pc.Pick(hint.Value.Move.HandIndex), Is.True);
+                    for (int i = 0; i < hint.Value.Move.Rotation; i++) pc.Rotate(+1);
+                    pc.Hover(hint.Value.Move.Cell);
+                    Assert.That(pc.Place(hint.Value.Move.Cell), Is.True);
+                    hinted++;
+                    for (int f = 0; f < 3 && _app.Match.Board.HintVisible; f++) yield return null;
+                    Assert.That(_app.Match.Board.HintVisible, Is.False, "the hint is cleared after the move");
+                }
+                else if (pc.IsAwaitingMove)
+                {
+                    pc.Pick(0);
+                    int cell = Enumerable.Range(0, 9).First(c => !pc.State.Board[c].HasValue);
+                    pc.Place(cell);
+                }
+                yield return null;
+            }
+            Assert.That(_app.ResultReady, Is.True);
+            Assert.That(hinted, Is.EqualTo(2));
+        }
+
+        /// <summary>設定の「画面の揺れ OFF」: 演出つき（×2）の対局でカメラが一度も揺れない。ON なら揺れる。効果音も鳴らしている。</summary>
+        [UnityTest]
+        public IEnumerator ScreenShakeSettingIsHonored()
+        {
+            bool savedShake = UserPrefs.ScreenShake;
+            var layout = Object.FindAnyObjectByType<Edgewise.Game.View.TableLayout>();
+            try
+            {
+                foreach (bool shakeOn in new[] { false, true })
+                {
+                    UserPrefs.ScreenShake = shakeOn;
+                    UserPrefs.SpeedOverride = PlaybackSpeed.Double;
+                    var sfx = Edgewise.Game.Audio.SfxBank.Instance;
+                    int soundsBefore = sfx.PlayedCount;
+                    _app.StartMatch(new MatchSettings
+                    {
+                        seat0 = SeatKind.Cpu, seat1 = SeatKind.Cpu, seat0Difficulty = Difficulty.Easy, difficulty = Difficulty.Easy,
+                        same = true, plus = true, combo = true, seed = 4,
+                    });
+                    yield return null;
+                    float maxOffset = 0f, maxTrauma = 0f, t = 0f;
+                    while (!_app.ResultReady && t < TimeoutSeconds)
+                    {
+                        t += Time.unscaledDeltaTime;
+                        maxOffset = Mathf.Max(maxOffset, layout.ShakeOffset.magnitude);
+                        maxTrauma = Mathf.Max(maxTrauma, _app.Match.JuiceFx.Shake.Trauma);
+                        yield return null;
+                    }
+                    Assert.That(_app.ResultReady, Is.True);
+                    if (shakeOn) Assert.That(maxTrauma, Is.GreaterThan(0f), "shake ON must shake");
+                    else
+                    {
+                        Assert.That(maxOffset, Is.EqualTo(0f), "shake OFF must not move the camera");
+                        Assert.That(maxTrauma, Is.EqualTo(0f));
+                    }
+                    Assert.That(sfx.PlayedCount, Is.GreaterThan(soundsBefore + 9), "place / flip / result sounds");
+                }
+            }
+            finally
+            {
+                UserPrefs.ScreenShake = savedShake;
+                UserPrefs.SpeedOverride = PlaybackSpeed.Instant;
+            }
         }
 
         /// <summary>Sudden Death の再戦（盤のカードを手札に戻して並べ直す）を含む対局でも、最後に表示とエンジンが一致する。</summary>

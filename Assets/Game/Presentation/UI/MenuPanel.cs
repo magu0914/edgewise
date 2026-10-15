@@ -10,7 +10,7 @@ using UnityEngine.UI;
 
 namespace Edgewise.Game.UI
 {
-    /// <summary>対戦中の右上メニュー: ルール確認・速度・ミュート・降参。</summary>
+    /// <summary>対戦中の右上メニュー: ルール確認・設定（速度・音量・揺れ）・ミュート・降参。</summary>
     public sealed class MenuPanel : MonoBehaviour, IResponsiveUi
     {
         [SerializeField] Image panel;
@@ -26,6 +26,7 @@ namespace Edgewise.Game.UI
         RuleSet _rules;
 
         public event Action ResignPressed;
+        public event Action SettingsPressed;
         public event Action Closed;
 
         public bool IsOpen => gameObject.activeSelf;
@@ -39,7 +40,7 @@ namespace Edgewise.Game.UI
             panel = UiKit.Panel(root, "Panel", a, Theme.Panel);
             title = UiKit.Label(panel.transform, "Title", a, UiText.MenuTitle, 32, Theme.Gold);
             rulesButton = UiKit.Button(panel.transform, "RulesButton", a, UiText.MenuRules, 24, out _);
-            speedButton = UiKit.Button(panel.transform, "SpeedButton", a, UiText.MenuSpeed, 24, out _);
+            speedButton = UiKit.Button(panel.transform, "SettingsButton", a, UiText.MenuSettings, 24, out _);
             muteButton = UiKit.Button(panel.transform, "MuteButton", a, UiText.MenuMute, 24, out _);
             resignButton = UiKit.Button(panel.transform, "ResignButton", a, UiText.MenuResign, 24, out _, new Color(0.45f, 0.18f, 0.18f));
             closeButton = UiKit.Button(panel.transform, "CloseButton", a, UiText.MenuClose, 24, out _, new Color(0.25f, 0.42f, 0.40f));
@@ -53,11 +54,7 @@ namespace Edgewise.Game.UI
         void Awake()
         {
             rulesButton.onClick.AddListener(() => rulesPanel.gameObject.SetActive(!rulesPanel.gameObject.activeSelf));
-            speedButton.onClick.AddListener(() =>
-            {
-                UserPrefs.Speed = (PlaybackSpeed)(((int)UserPrefs.Speed + 1) % 3);
-                Refresh();
-            });
+            speedButton.onClick.AddListener(() => SettingsPressed?.Invoke());
             muteButton.onClick.AddListener(() =>
             {
                 UserPrefs.Mute = !UserPrefs.Mute;
@@ -109,8 +106,7 @@ namespace Edgewise.Game.UI
 
         void Refresh()
         {
-            var sp = UserPrefs.Speed;
-            SetLabel(speedButton, UiText.MenuSpeed + ": " + (sp == PlaybackSpeed.Normal ? UiText.SpeedNormal : sp == PlaybackSpeed.Double ? UiText.SpeedDouble : UiText.SpeedInstant));
+
             SetLabel(muteButton, UiText.MenuMute + ": " + (UserPrefs.Mute ? UiText.On : UiText.Off));
             rulesText.text = DescribeRules(_rules);
         }
