@@ -1,0 +1,315 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c65216fae75c18b4584c65f7f2ad5207, type: 3}
+  m_Name: CardArtTable
+  m_EditorClassIdentifier: Edgewise.Game::Edgewise.Game.View.CardArtTable
+  entries:
+  - cardId: glimmouse
+    author: lorc
+    icon: mouse
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: dustwisp
+    author: lorc
+    icon: ghost
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: coglet
+    author: delapouite
+    icon: mono-wheel-robot
+    scale: 0.92
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: emberkit
+    author: caro-asercion
+    icon: fox
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: scalefry
+    author: caro-asercion
+    icon: axolotl
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: pyxmoth
+    author: lorc
+    icon: fairy
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: bolthare
+    author: delapouite
+    icon: rabbit
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: rivetcrab
+    author: lorc
+    icon: sad-crab
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: frostnewt
+    author: lorc
+    icon: gecko
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: mirelamp
+    author: delapouite
+    icon: elysium-shade
+    scale: 0.92
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: lynxlight
+    author: lorc
+    icon: cat
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: gearowl
+    author: lorc
+    icon: owl
+    scale: 0.95
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: cinderdrake
+    author: delapouite
+    icon: dimetrodon
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: hollowshade
+    author: lorc
+    icon: spectre
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: stonetoad
+    author: lorc
+    icon: frog
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: velahound
+    author: delapouite
+    icon: sitting-dog
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: clockwyrm
+    author: lorc
+    icon: centipede
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: tidewraith
+    author: lorc
+    icon: jellyfish
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: marshwyvern
+    author: lorc
+    icon: wyvern
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: voltsparrow
+    author: delapouite
+    icon: swallow
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: lupusfang
+    author: lorc
+    icon: werewolf
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: orreryx
+    author: lorc
+    icon: scarab-beetle
+    scale: 0.95
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: gloamveil
+    author: lorc
+    icon: wing-cloak
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: emberscale
+    author: delapouite
+    icon: velociraptor
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: corvusarc
+    author: lorc
+    icon: raven
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: aquilaburst
+    author: lorc
+    icon: eagle-emblem
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: ironcetus
+    author: delapouite
+    icon: dolphin
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: lanternmare
+    author: caro-asercion
+    icon: cloaked-figure-on-horseback
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: serpenscoil
+    author: delapouite
+    icon: cobra
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: rimeloom
+    author: delapouite
+    icon: djinn
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: leomane
+    author: lorc
+    icon: lion
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: forgecolossus
+    author: lorc
+    icon: robot-golem
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: auroraveil
+    author: delapouite
+    icon: fairy
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: draconyx
+    author: lorc
+    icon: hydra
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: stormgear
+    author: lorc
+    icon: missile-mech
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: cygnwraith
+    author: lorc
+    icon: swan
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: taurocrag
+    author: delapouite
+    icon: bison
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: gravelith
+    author: lorc
+    icon: trilobite
+    scale: 0.95
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: voltwyrm
+    author: lorc
+    icon: sea-serpent
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: nocturnis
+    author: delapouite
+    icon: bat
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: orionmane
+    author: delapouite
+    icon: tiger
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: astrolabion
+    author: delapouite
+    icon: praying-mantis
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: cassiveil
+    author: delapouite
+    icon: mermaid
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: scorpidrake
+    author: lorc
+    icon: scorpion
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: polarion
+    author: delapouite
+    icon: pterodactylus
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: andromede
+    author: lorc
+    icon: angel-outfit
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: pegasion
+    author: skoll
+    icon: pegasus
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: ophiwyrm
+    author: lorc
+    icon: dragon-spiral
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: sextantor
+    author: lorc
+    icon: megabot
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: ursamaw
+    author: cathelineau
+    icon: polar-bear
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0

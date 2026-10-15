@@ -789,6 +789,7 @@ MonoBehaviour:
   tribeText: {fileID: 9077429937081710581}
   markText: {fileID: 7063667412213534635}
   modText: {fileID: 7810532631239033392}
+  art: {fileID: 11400000, guid: 9f80b2ca740cda14a9c36e77b01f1c46, type: 2}
 --- !u!1 &4049634201047989013
 GameObject:
   m_ObjectHideFlags: 0

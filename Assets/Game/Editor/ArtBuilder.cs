@@ -13,7 +13,7 @@ namespace Edgewise.EditorTools
     /// <summary>
     /// 見た目のアセットを生成・更新する（冪等）: マテリアル、uGUI の角丸スプライト（生成テクスチャ）、
     /// JuiceSettings（無ければ作る。調整済みの値は上書きしない）、Bloom の Volume Profile、GameAssets、カードのプレハブ。
-    /// 外部の画像素材は使わない（絵はシェーダーと生成テクスチャ）。
+    /// カード絵は game-icons.net のシルエット（CC BY 3.0）から CardArtPipeline が作る SDF アトラス。それ以外の絵はシェーダーと生成テクスチャ。
     /// </summary>
     public static class ArtBuilder
     {
@@ -54,6 +54,15 @@ namespace Edgewise.EditorTools
             assets.juice = EnsureJuice();
             assets.bgm = EnsureBgmLibrary();
             assets.quad = Resources.GetBuiltinResource<Mesh>("Quad.fbx");
+
+            // カード絵（Phase 4）: SVG → マスク → SDF アトラス＋星座（マスクがあればラスタライズは省く）
+            var (art, artTable) = CardArtPipeline.Build();
+            assets.cardArt = art;
+            assets.cardArtTable = artTable;
+            assets.cardMaterial.SetTexture("_ArtTex", art.atlas);
+            assets.cardMaterial.SetFloat("_ArtSpread", CardArtBaker.Spread / CardArtBaker.Cell);
+            EditorUtility.SetDirty(assets.cardMaterial);
+            Debug.Log("[Edgewise] Card material art texture: " + (assets.cardMaterial.GetTexture("_ArtTex") != null ? assets.cardMaterial.GetTexture("_ArtTex").name : "null") + " (atlas " + (art.atlas != null) + ")");
             EditorUtility.SetDirty(assets);
             AssetDatabase.SaveAssets();
 

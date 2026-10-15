@@ -28,5 +28,11 @@ namespace Edgewise.Game.View
         public Sprite roundRect;
 
         public Mesh quad;
+
+        /// <summary>カード絵の SDF アトラスと星座（Phase 4。CardArtPipeline が生成）。</summary>
+        public CardArtAtlas cardArt;
+
+        /// <summary>カード → アイコン（作者・名前）の対応。クレジット表示に使う。</summary>
+        public CardArtTable cardArtTable;
     }
 }

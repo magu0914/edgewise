@@ -6,8 +6,8 @@ namespace Edgewise.Game.View
 {
     /// <summary>
     /// カード 1 枚の見た目（表示だけ。ルールは持たない）。ワールド空間のクアッド 1 枚＋TextMeshPro の文字。
-    /// 本体の絵（枠・星座エンブレム・影・光）は Edgewise/Card シェーダーが MaterialPropertyBlock の値から描く。
-    /// ランクの数字は Pivot で回しても常に正立させ、値だけを回転後の並びにする（読みやすさ優先）。エンブレムは回す。
+    /// 本体の絵（枠・カード絵＝星雲・シルエット・星座・影・光）は Edgewise/Card シェーダーが MaterialPropertyBlock の値から描く。
+    /// ランクの数字は Pivot で回しても常に正立させ、値だけを回転後の並びにする（読みやすさ優先）。カード絵は回す。
     /// </summary>
     public sealed class CardView : MonoBehaviour
     {
@@ -22,15 +22,25 @@ namespace Edgewise.Game.View
         [SerializeField] TextMeshPro markText;
         [SerializeField] TextMeshPro modText;
 
+        /// <summary>カード絵（SDF アトラスと星座）。Build で GameAssets から受け取る。</summary>
+        [SerializeField] CardArtAtlas art;
+
         static readonly int OwnerColorId = Shader.PropertyToID("_OwnerColor");
         static readonly int ElemColorId = Shader.PropertyToID("_ElemColor");
         static readonly int GlowColorId = Shader.PropertyToID("_GlowColor");
         static readonly int PatternId = Shader.PropertyToID("_Pattern");
         static readonly int ElemOnId = Shader.PropertyToID("_ElemOn");
         static readonly int TribeOnId = Shader.PropertyToID("_TribeOn");
-        static readonly int StarCountId = Shader.PropertyToID("_StarCount");
-        static readonly int StarsId = Shader.PropertyToID("_Stars");
-        static readonly int BranchId = Shader.PropertyToID("_Branch");
+        static readonly int ArtRectId = Shader.PropertyToID("_ArtRect");
+        static readonly int ArtCountId = Shader.PropertyToID("_ArtCount");
+        static readonly int ArtStarsId = Shader.PropertyToID("_ArtStars");
+        static readonly int ArtLinesId = Shader.PropertyToID("_ArtLines");
+        static readonly int TribeId = Shader.PropertyToID("_Tribe");
+        static readonly int LevelFxId = Shader.PropertyToID("_LevelFx");
+        static readonly int TiltId = Shader.PropertyToID("_Tilt");
+        static readonly int ArtTexId = Shader.PropertyToID("_ArtTex");
+        static readonly Vector4[] StarBuffer = new Vector4[CardArtAtlas.MaxStars];
+        static readonly Vector4[] LineBuffer = new Vector4[CardArtAtlas.MaxLines];
         static readonly int EmblemRotId = Shader.PropertyToID("_EmblemRot");
         static readonly int LevelId = Shader.PropertyToID("_Level");
         static readonly int GlowId = Shader.PropertyToID("_Glow");
@@ -46,7 +56,8 @@ namespace Edgewise.Game.View
 
         MaterialPropertyBlock _mpb;
         bool _dirty = true;
-        float _glow, _select, _alpha = 1f, _lift, _flash, _emblemRot;
+        float _glow, _select, _alpha = 1f, _lift, _flash, _emblemRot, _levelFx;
+        Vector2 _tilt;
         Color _glowColor = Color.white;
         int _order;
 
@@ -84,6 +95,7 @@ namespace Edgewise.Game.View
             body.sharedMaterial = assets.cardMaterial;
             body.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             body.receiveShadows = false;
+            art = assets.cardArt;
 
             // 原作と同じく左上に菱形（上・右・下・左）に並べる。下地はシェーダーの濃いプレート（中心をそろえる）。
             // 小さく表示される縦画面の手札でも読めるように、太字＋暗い縁取りで大きめにし、4 つの間隔を空ける
@@ -216,6 +228,25 @@ namespace Edgewise.Game.View
             _dirty = true;
         }
 
+        /// <summary>
+        /// 傾き（DESIGN §7-1 の 5。x = 右へ、y = 上へ、各 -1..1）。シェーダーは層ごとにずらす（背景は少し、星は大きく）。
+        /// 4a では呼び出し元がなく常に 0（口だけ用意）。
+        /// </summary>
+        public void SetTilt(Vector2 tilt)
+        {
+            if (_tilt == tilt) return;
+            _tilt = tilt;
+            _dirty = true;
+        }
+
+        /// <summary>レベルごとの加工の強さ（DESIGN §7-1 の 4。4b で実装。4a では 0）。</summary>
+        public void SetLevelFx(float amount)
+        {
+            if (Mathf.Approximately(_levelFx, amount)) return;
+            _levelFx = amount;
+            _dirty = true;
+        }
+
         public void SetFlash(float flash)
         {
             if (Mathf.Approximately(_flash, flash)) return;
@@ -299,21 +330,30 @@ namespace Edgewise.Game.View
             _mpb.SetVector(QuadSizeId, QuadSize);
             if (Def != null)
             {
-                var art = Constellation.For(Def.Id, Def.Level);
+                var entry = art != null ? art.Find(Def.Id) : null;
                 _mpb.SetColor(ElemColorId, Theme.ElementColor(Def.Element));
                 _mpb.SetFloat(ElemOnId, Def.Element.HasValue ? 1f : 0f);
                 _mpb.SetFloat(TribeOnId, Def.Tribe.HasValue ? 1f : 0f);
-                _mpb.SetFloat(StarCountId, art.Count);
-                _mpb.SetVectorArray(StarsId, art.Stars);
-                _mpb.SetVector(BranchId, new Vector4(art.Branch.x, art.Branch.y, 0, 0));
+                _mpb.SetFloat(TribeId, Def.Tribe.HasValue ? (float)(int)Def.Tribe.Value : -1f);
+                CardArtAtlas.Fill(entry?.stars, StarBuffer);
+                CardArtAtlas.Fill(entry?.lines, LineBuffer);
+                _mpb.SetVectorArray(ArtStarsId, StarBuffer);
+                _mpb.SetVectorArray(ArtLinesId, LineBuffer);
+                if (art != null && art.atlas != null) _mpb.SetTexture(ArtTexId, art.atlas);
+                _mpb.SetVector(ArtRectId, entry != null ? entry.uvRect : Vector4.zero);
+                _mpb.SetVector(ArtCountId, entry != null
+                    ? new Vector4(Mathf.Min(entry.stars.Length, CardArtAtlas.MaxStars), Mathf.Min(entry.lines.Length, CardArtAtlas.MaxLines), 1f, 0f)
+                    : Vector4.zero);
                 _mpb.SetFloat(LevelId, Def.Level);
+                _mpb.SetFloat(LevelFxId, _levelFx);
+                _mpb.SetVector(TiltId, new Vector4(_tilt.x, _tilt.y, 0f, 0f));
                 _mpb.SetFloat(EmblemRotId, _emblemRot);
                 _mpb.SetFloat(PivotId, Rotation);
                 _mpb.SetVector(MarkDirId, new Vector4(_markDir.x, _markDir.y, 0f, 0f));
             }
             else
             {
-                _mpb.SetFloat(StarCountId, 0);
+                _mpb.SetVector(ArtCountId, Vector4.zero);
                 _mpb.SetFloat(ElemOnId, 0);
                 _mpb.SetFloat(TribeOnId, 0);
                 _mpb.SetFloat(LevelId, 0);

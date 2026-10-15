@@ -179,7 +179,7 @@ async function keyboardMove(choice, turn) {
 }
 const results = { shots: [], fps: [], errors: [] };
 
-async function playMatch({ wantPreview, wantFlip, wantRule, wantPivot, wantKeyboard, wantMenu, wantHint, wantCombo, alwaysSP }) {
+async function playMatch({ wantPreview, wantFlip, wantRule, wantPivot, wantKeyboard, wantMenu, wantHint, wantCombo, alwaysSP, onTurn }) {
   let moves = 0;
   const got = { preview: !wantPreview, flip: !wantFlip, rule: !wantRule, pivot: !wantPivot, keyboard: !wantKeyboard, menu: !wantMenu,
     hint: !wantHint, combo: !wantCombo };
@@ -208,6 +208,7 @@ async function playMatch({ wantPreview, wantFlip, wantRule, wantPivot, wantKeybo
       await sleep(40);
     }
     await sleep(150);
+    if (onTurn) await onTurn(moves, turn);
     // 手を選ぶ: Same/Plus（撮影用）→ 裏返す枚数が多い手 → 先頭
     let choice = null;
     if (!got.rule || alwaysSP) choice = turn.options.find((o) => o.same || o.plus);
@@ -444,6 +445,84 @@ async function run3c() {
   log('checks', JSON.stringify(checks));
 }
 
+// ---------------------------------------------------------------------------
+// Phase 4a: カード絵（星雲・シルエット・星座）の入った対戦を 1 局。横の対戦中・カード 1 枚の拡大・縦 360x640 の対戦中を撮り、FPS を集める。
+//   node tools/webgl_e2e.mjs --scenario 4a --url http://127.0.0.1:8771/ --out Logs/shots/4a
+// ---------------------------------------------------------------------------
+async function clipCard(name, cell, spacing, scale) {
+  const w = spacing * 0.98, h = spacing * 1.25;
+  const r = await send('Page.captureScreenshot', { format: 'png', clip: { x: Math.max(0, cell.x - w / 2), y: Math.max(0, cell.y - h / 2), width: w, height: h, scale } });
+  writeFileSync(join(OUT, name + '.png'), Buffer.from(r.data, 'base64'));
+  log('shot', name);
+}
+
+async function run4a() {
+  const checks = {};
+  const url = `${BASE}?log&seed=${SEED}&slow=1`;
+  log('open', url);
+  await send('Page.navigate', { url });
+  const tAt = (await waitLine(/^screen Title/, 120000)).index;
+  await sleep(1500);
+  await shot('00_title');
+  await click(...Object.values(uiRect('Title', 'StartButton', tAt)));
+  const setupAt = (await waitLine(/^screen Setup/, 10000, tAt)).index;
+  await sleep(500);
+  await click(...Object.values(uiRect('Setup', 'BeginButton', setupAt)));
+  await waitLine(/^match seed=/, 20000, setupAt);
+
+  let closeup = false;
+  const r = await playMatch({
+    onTurn: async (moves, turn) => {
+      const full = turn.cells.filter((c) => c && !c.empty);
+      if (!closeup && full.length >= 4) {
+        await sleep(400);
+        await shot('01_match_landscape');
+        const spacing = Math.abs(turn.cells[1].x - turn.cells[0].x);
+        // 盤の中央寄りのカードを拡大（数字・シルエット・星座の読みやすさの確認）
+        const pick = full.sort((a, b) => Math.hypot(a.x - turn.cells[4].x, a.y - turn.cells[4].y) - Math.hypot(b.x - turn.cells[4].x, b.y - turn.cells[4].y))[0];
+        await clipCard('03_card_closeup', pick, spacing, 3);
+        // 手札の 1 枚（小さく表示されるカード）も拡大
+        const hand = turn.hand.find((c) => c);
+        if (hand) await clipCard('03b_hand_card_closeup', hand, spacing * 0.8, 3);
+        checks.boardCellSpacingPx = spacing;
+        closeup = true;
+      }
+    },
+  });
+  log('match finished', r.moves, 'moves');
+  const resAt = (await waitLine(/^screen Result/, 60000)).index;
+  await sleep(800);
+  await shot('04_result');
+  checks.fpsMatch = consoleLines.map((l) => l.line).filter((l) => /^fps-match/.test(l));
+
+  // 縦画面 360x640 で再戦し、2 手目のあとで撮る
+  await send('Emulation.setDeviceMetricsOverride', { width: 360, height: 640, deviceScaleFactor: 1, mobile: false });
+  const pAt = (await waitLine(/^screen Portrait/, 10000, resAt)).index;
+  await sleep(500);
+  await click(...Object.values(uiRect('Portrait', 'AgainButton', pAt)));
+  await waitLine(/^match seed=/, 20000, pAt);
+  let portraitMoves = 0;
+  const pFps = consoleLines.length;
+  const r2 = await playMatch({
+    onTurn: async (moves, turn) => {
+      if (moves === 2 && portraitMoves === 0) {
+        await sleep(500);
+        await shot('02_match_portrait_360x640');
+        const spacing = Math.abs(turn.cells[1].x - turn.cells[0].x);
+        const full = turn.cells.filter((c) => c && !c.empty);
+        if (full.length) await clipCard('03c_portrait_card_closeup', full[0], spacing, 4);
+        portraitMoves = moves;
+      }
+    },
+  });
+  log('portrait match finished', r2.moves, 'moves');
+  await waitLine(/^screen Result/, 60000);
+  checks.fpsPortrait = consoleLines.slice(pFps).map((l) => l.line).filter((l) => /^fps-match/.test(l));
+  results.fps = consoleLines.filter((l) => /^fps/.test(l.line)).map((l) => l.line);
+  results.checks = checks;
+  log('checks', JSON.stringify(checks));
+}
+
 let exitCode = 0;
 try {
   await connect();
@@ -452,6 +531,10 @@ try {
   await send('Runtime.enable');
   await send('Page.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
+  if (args.scenario === '4a') {
+    await run4a();
+    throw { done: true };
+  }
   if (args.scenario === '3c') {
     await run3c();
     throw { done: true };

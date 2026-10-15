@@ -1,7 +1,9 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)][string]$LogName,
     [string[]]$Extra = @(),
-    [switch]$NoQuit
+    [switch]$NoQuit,
+    # GPU で描画が必要なとき（カードのコンタクトシートなど）は -nographics を付けない
+    [switch]$Graphics
 )
 # Start-Process -Wait also waits for the VBCSCompiler server that Unity spawns,
 # so wait only for the Unity process itself via -PassThru + WaitForExit.
@@ -13,7 +15,8 @@ $running = Get-CimInstance Win32_Process -Filter "Name = 'Unity.exe'" |
     Where-Object { $_.CommandLine -and $_.CommandLine.ToLower().Contains($proj.ToLower()) }
 if ($running) { Write-Output "Unity already has this project open: $($running.ProcessId -join ',')"; exit 99 }
 if (Test-Path (Join-Path $proj 'Temp\UnityLockfile')) { Remove-Item (Join-Path $proj 'Temp\UnityLockfile') -Force; Write-Output 'removed stale UnityLockfile' }
-$args2 = @('-batchmode', '-nographics', '-projectPath', "`"$proj`"", '-logFile', "`"$log`"")
+$args2 = @('-batchmode', '-projectPath', "`"$proj`"", '-logFile', "`"$log`"")
+if (-not $Graphics) { $args2 = @('-nographics') + $args2 }
 if (-not $NoQuit) { $args2 = @('-quit') + $args2 }
 $args2 += $Extra
 $t = Get-Date

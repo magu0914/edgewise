@@ -1,8 +1,70 @@
 # クレジット・ライセンス
 
-本作のカード絵・背景・盤面・アイコンはすべてシェーダーとコードによる手続き生成で、外部の画像素材は使っていません。
+本作の背景・盤面・UI のアイコンはシェーダーとコードによる手続き生成です。カード絵は下記の game-icons.net のシルエット（CC BY 3.0）を SDF に変換し、星雲・星座などをシェーダーで重ねて描いています（`docs/ART.md`）。
 効果音もすべて `AudioClip.Create` による合成音（`SfxSynth`。正弦波・三角波・ノイズ＋エンベロープ）で、外部の音素材は使っていません。
 外部から取り込んだ素材は以下のとおりです。
+
+## カード絵のシルエット（game-icons.net）
+
+カード絵の土台に [game-icons.net](https://game-icons.net) のアイコン（SVG。2026-10-16 取得）を使っています。ライセンスは
+[Creative Commons Attribution 3.0（CC BY 3.0）](https://creativecommons.org/licenses/by/3.0/)です。
+採用した SVG は `Assets/Art/Icons/Source/<作者>/` にあり、白い図形だけをマスクにして SDF（符号付き距離場）へ変換し、色・光・星座をシェーダーで加えています（改変あり）。
+Icons made by Lorc, Delapouite, Caro Asercion, Skoll and Cathelineau, available on https://game-icons.net under CC BY 3.0.
+
+| カード | アイコン | 作者 | ライセンス |
+|---|---|---|---|
+| Glimmouse | mouse | Lorc | CC BY 3.0 |
+| Dustwisp | ghost | Lorc | CC BY 3.0 |
+| Coglet | mono-wheel-robot | Delapouite | CC BY 3.0 |
+| Emberkit | fox | Caro Asercion | CC BY 3.0 |
+| Scalefry | axolotl | Caro Asercion | CC BY 3.0 |
+| Pyxmoth | fairy | Lorc | CC BY 3.0 |
+| Bolthare | rabbit | Delapouite | CC BY 3.0 |
+| Rivetcrab | sad-crab | Lorc | CC BY 3.0 |
+| Frostnewt | gecko | Lorc | CC BY 3.0 |
+| Mirelamp | elysium-shade | Delapouite | CC BY 3.0 |
+| Lynxlight | cat | Lorc | CC BY 3.0 |
+| Gearowl | owl | Lorc | CC BY 3.0 |
+| Cinderdrake | dimetrodon | Delapouite | CC BY 3.0 |
+| Hollowshade | spectre | Lorc | CC BY 3.0 |
+| Stonetoad | frog | Lorc | CC BY 3.0 |
+| Velahound | sitting-dog | Delapouite | CC BY 3.0 |
+| Clockwyrm | centipede | Lorc | CC BY 3.0 |
+| Tidewraith | jellyfish | Lorc | CC BY 3.0 |
+| Marshwyvern | wyvern | Lorc | CC BY 3.0 |
+| Voltsparrow | swallow | Delapouite | CC BY 3.0 |
+| Lupusfang | werewolf | Lorc | CC BY 3.0 |
+| Orreryx | scarab-beetle | Lorc | CC BY 3.0 |
+| Gloamveil | wing-cloak | Lorc | CC BY 3.0 |
+| Emberscale | velociraptor | Delapouite | CC BY 3.0 |
+| Corvusarc | raven | Lorc | CC BY 3.0 |
+| Aquilaburst | eagle-emblem | Lorc | CC BY 3.0 |
+| Ironcetus | dolphin | Delapouite | CC BY 3.0 |
+| Lanternmare | cloaked-figure-on-horseback | Caro Asercion | CC BY 3.0 |
+| Serpenscoil | cobra | Delapouite | CC BY 3.0 |
+| Rimeloom | djinn | Delapouite | CC BY 3.0 |
+| Leomane | lion | Lorc | CC BY 3.0 |
+| Forgecolossus | robot-golem | Lorc | CC BY 3.0 |
+| Auroraveil | fairy | Delapouite | CC BY 3.0 |
+| Draconyx | hydra | Lorc | CC BY 3.0 |
+| Stormgear | missile-mech | Lorc | CC BY 3.0 |
+| Cygnwraith | swan | Lorc | CC BY 3.0 |
+| Taurocrag | bison | Delapouite | CC BY 3.0 |
+| Gravelith | trilobite | Lorc | CC BY 3.0 |
+| Voltwyrm | sea-serpent | Lorc | CC BY 3.0 |
+| Nocturnis | bat | Delapouite | CC BY 3.0 |
+| Orionmane | tiger | Delapouite | CC BY 3.0 |
+| Astrolabion | praying-mantis | Delapouite | CC BY 3.0 |
+| Cassiveil | mermaid | Delapouite | CC BY 3.0 |
+| Scorpidrake | scorpion | Lorc | CC BY 3.0 |
+| Polarion | pterodactylus | Delapouite | CC BY 3.0 |
+| Andromede | angel-outfit | Lorc | CC BY 3.0 |
+| Pegasion | pegasus | Skoll | CC BY 3.0 |
+| Ophiwyrm | dragon-spiral | Lorc | CC BY 3.0 |
+| Sextantor | megabot | Lorc | CC BY 3.0 |
+| Ursamaw | polar-bear | Cathelineau | CC BY 3.0 |
+
+作者のサイト: Lorc（http://lorcblog.blogspot.com）、Delapouite（http://delapouite.com）、Caro Asercion、Skoll、Cathelineau（いずれも game-icons.net の license.txt の表記）。
 
 ## BGM（OpenTracks、旧 DOVA-SYNDROME）
 
