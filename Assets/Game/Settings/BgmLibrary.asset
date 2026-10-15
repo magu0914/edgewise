@@ -14,20 +14,20 @@ MonoBehaviour:
   m_EditorClassIdentifier: Edgewise.Game::Edgewise.Game.Audio.BgmLibrary
   title:
     intro: {fileID: 0}
-    loop: {fileID: 0}
-    volume: 1
+    loop: {fileID: 8300000, guid: 51e9d684ffe14984b79b759f2becb512, type: 3}
+    volume: 0.55
   match:
     intro: {fileID: 0}
-    loop: {fileID: 0}
+    loop: {fileID: 8300000, guid: 7b524246c9c940b28a692cac23755c6e, type: 3}
     volume: 1
   victory:
-    intro: {fileID: 0}
+    intro: {fileID: 8300000, guid: ca107624c20f4e049cc558bf4302c5c6, type: 3}
     loop: {fileID: 0}
-    volume: 1
+    volume: 0.62
   defeat:
-    intro: {fileID: 0}
+    intro: {fileID: 8300000, guid: 1e3a4e9d0c79414b87a5c64fedd5ecc7, type: 3}
     loop: {fileID: 0}
-    volume: 1
+    volume: 0.43
   draw:
     intro: {fileID: 0}
     loop: {fileID: 0}

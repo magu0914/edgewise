@@ -4,6 +4,20 @@
 効果音もすべて `AudioClip.Create` による合成音（`SfxSynth`。正弦波・三角波・ノイズ＋エンベロープ）で、外部の音素材は使っていません。
 外部から取り込んだ素材は以下のとおりです。
 
+## BGM（OpenTracks、旧 DOVA-SYNDROME）
+
+すべて [OpenTracks](https://opentracks.com/) のフリー素材です（2026-10-16 取得）。[音源利用ライセンス](https://opentracks.com/help/articles/license/)に従い、ゲームの背景音楽として使用しています。作曲者の利用条件はいずれも「サイト準拠」です。
+ライセンスで音源ファイルそのものの配布が禁止されているため、**曲ファイルはリポジトリに含めていません**（`.gitignore` 対象）。ビルドしたゲームには変換された形で含まれます。手元で鳴らすには、下の入手先から取得して `docs/AUDIO.md` の手順で `Assets/Audio/Bgm/` に置いてください。
+
+| 場面 | 曲名 | 作曲者 | 入手先 | 加工 |
+|---|---|---|---|---|
+| タイトル | 星空 | Heitaro Ashibe | https://opentracks.com/bgm/detail/22997 | WAV に変換のみ → `bgm_title_hoshizora.wav` |
+| 対戦 | ギザなビート（トラック 2・ループ版） | マニーラ | https://opentracks.com/bgm/detail/22412 | WAV に変換し、MP3 の先頭 1105 サンプルの遅延と末尾の余白を除いて 96.000 秒ちょうどのループに切り出し → `bgm_match_gizana_beat.wav`（ffmpeg `atrim=start_sample=1105:end_sample=4609105`） |
+| 勝利 | 明日へのファンファーレ | のる | https://opentracks.com/bgm/detail/22159 | WAV に変換のみ → `jingle_victory_ashita_fanfare.wav` |
+| 敗北 | Too late... | t.tam | https://opentracks.com/bgm/detail/4016 | WAV に変換のみ → `jingle_defeat_too_late.wav` |
+
+素敵な楽曲をありがとうございます。
+
 ## フォント
 
 ### Noto Sans JP（Regular）

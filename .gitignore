@@ -1,3 +1,7 @@
+# ---- BGM（OpenTracks のライセンスで音源ファイルの再配布が禁止されているため管理しない。docs/CREDITS.md 参照）----
+/Assets/Audio/Bgm/*
+!/Assets/Audio/Bgm/.gitkeep
+
 # ---- Unity ----
 /[Ll]ibrary/
 /[Tt]emp/
