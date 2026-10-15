@@ -1,128 +1,144 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
-using Edgewise.Core;
-using Edgewise.Core.Data;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Edgewise.Sim
 {
     /// <summary>
-    /// 自己対戦シミュレーター（最小版）。ランダム手同士で N 局回し、先攻勝率・後攻勝率・引き分け率を Markdown 表で出す。
-    /// Phase 2 で CPU（Easy / Normal / Hard）同士の対戦と、連鎖数・Pivot 使用タイミングなどの集計を足す。
+    /// 自己対戦シミュレーター（DESIGN.md §6）。
     ///
-    /// 使い方: dotnet run --project dotnet/Edgewise.Sim -- [--games N] [--seed S]
+    /// 使い方:
+    ///   dotnet run -c Release --project dotnet/Edgewise.Sim -- [options]
+    ///     --match A:B        対戦（複数可・カンマ区切り可）。A/B = random | easy | normal | hard、"hard@200000" でノード予算を上書き
+    ///     --rules LIST       ルールのプリセット（カンマ区切り）。default = basic,spc,all,openoff。他: spc-openoff, all-openoff, same, plus, ...
+    ///     --deals N          配牌の数（各配牌を席を入れ替えて 2 局。既定 500 → 1000 局）
+    ///     --games N          局数で指定（--deals N/2 と同じ）
+    ///     --seed S           乱数の seed（配牌・先攻・AI の乱数がすべてこれで決まる）
+    ///     --threads T        並列数（既定 = 論理コア数）。結果はスレッド数によらず同じ（時間の計測値を除く）
+    ///     --out PATH         Markdown を PATH にも書き出す
+    ///     --bench            ApplyMove と AI 探索の速度を測る
     /// </summary>
     public static class Program
     {
-        sealed class Preset
-        {
-            public readonly string Name;
-            public readonly RuleSet Rules;
-
-            public Preset(string name, RuleSet rules)
-            {
-                Name = name;
-                Rules = rules;
-            }
-        }
-
-        static readonly Preset[] Presets =
-        {
-            new Preset("Basic", new RuleSet()),
-            new Preset("Same", new RuleSet(same: true)),
-            new Preset("Plus", new RuleSet(plus: true)),
-            new Preset("Same+Plus+Combo", new RuleSet(same: true, plus: true, combo: true)),
-            new Preset("Elemental", new RuleSet(elemental: true)),
-            new Preset("Pivot", new RuleSet(pivot: true)),
-            new Preset("Sudden Death", new RuleSet(suddenDeath: true)),
-            new Preset("All", new RuleSet(random: true, same: true, sameWall: true, plus: true, combo: true, elemental: true, suddenDeath: true, pivot: true)),
-        };
-
         public static int Main(string[] args)
         {
-            int games = 2000;
+            var matches = new List<(PlayerSpec, PlayerSpec)>();
+            string rules = "default";
+            int deals = 500;
             long seed = 1;
+            int threads = Environment.ProcessorCount;
+            string outPath = null;
             bool bench = false;
-            for (int i = 0; i < args.Length; i++)
+            try
             {
-                if (args[i] == "--games" && i + 1 < args.Length) games = int.Parse(args[++i], CultureInfo.InvariantCulture);
-                else if (args[i] == "--seed" && i + 1 < args.Length) seed = long.Parse(args[++i], CultureInfo.InvariantCulture);
-                else if (args[i] == "--bench") bench = true;
-                else
+                for (int i = 0; i < args.Length; i++)
                 {
-                    Console.Error.WriteLine("usage: Edgewise.Sim [--games N] [--seed S] [--bench]");
-                    return 2;
+                    string a = args[i];
+                    string Next() => i + 1 < args.Length ? args[++i] : throw new ArgumentException(a + " needs a value");
+                    switch (a)
+                    {
+                        case "--match":
+                            foreach (var m in Next().Split(','))
+                            {
+                                var parts = m.Split(':');
+                                if (parts.Length != 2) throw new ArgumentException("--match expects A:B, got " + m);
+                                matches.Add((PlayerSpec.Parse(parts[0]), PlayerSpec.Parse(parts[1])));
+                            }
+                            break;
+                        case "--rules": rules = Next(); break;
+                        case "--deals": deals = int.Parse(Next(), CultureInfo.InvariantCulture); break;
+                        case "--games": deals = Math.Max(1, int.Parse(Next(), CultureInfo.InvariantCulture) / 2); break;
+                        case "--seed": seed = long.Parse(Next(), CultureInfo.InvariantCulture); break;
+                        case "--threads": threads = int.Parse(Next(), CultureInfo.InvariantCulture); break;
+                        case "--out": outPath = Next(); break;
+                        case "--bench": bench = true; break;
+                        default: throw new ArgumentException("unknown option " + a);
+                    }
                 }
             }
+            catch (Exception e) when (e is ArgumentException || e is FormatException)
+            {
+                Console.Error.WriteLine(e.Message);
+                Console.Error.WriteLine("usage: Edgewise.Sim [--match A:B[,C:D]] [--rules LIST] [--deals N | --games N] [--seed S] [--threads T] [--out PATH] [--bench]");
+                return 2;
+            }
+
             if (bench)
             {
                 Bench.Run();
                 return 0;
             }
+            if (matches.Count == 0) matches.Add((PlayerSpec.Parse("random"), PlayerSpec.Parse("random")));
 
-            var ids = new List<string>();
-            foreach (var c in CardCatalog.All) ids.Add(c.Id);
-
-            Console.WriteLine("# Random vs Random (" + games + " games per rule set, seed " + seed + ")");
-            Console.WriteLine();
-            Console.WriteLine("| Rules | Games | First player wins | Second player wins | Draws | Avg flips / game | Avg Sudden Death rounds | ms |");
-            Console.WriteLine("|---|---:|---:|---:|---:|---:|---:|---:|");
-
-            foreach (var preset in Presets)
+            var presets = RulePreset.Parse(rules);
+            var header = new StringBuilder();
+            header.AppendLine("## Edgewise.Sim");
+            header.AppendLine();
+            header.AppendLine("- Command: `dotnet run -c Release --project dotnet/Edgewise.Sim -- " + string.Join(" ", args) + "`");
+            header.AppendLine("- Deals: " + deals + " (x2 seats = " + (2 * deals) + " games per row), seed " + seed + ", threads " + threads);
+            header.AppendLine("- Machine: " + CpuName() + ", " + Environment.ProcessorCount + " logical cores, " + RuntimeInformation.OSDescription
+                + ", " + RuntimeInformation.FrameworkDescription);
+            var seen = new HashSet<string>();
+            foreach (var (a, b) in matches)
             {
-                var sw = Stopwatch.StartNew();
-                uint rng = Rng.SeedToState(seed);
-                int firstWins = 0, secondWins = 0, draws = 0;
-                long flips = 0, rounds = 0;
-                for (int g = 0; g < games; g++)
+                foreach (var p in new[] { a, b })
                 {
-                    int deckSize = preset.Rules.Random ? 8 : GameConstants.HandSize;
-                    var deck0 = new string[deckSize];
-                    var deck1 = new string[deckSize];
-                    for (int i = 0; i < deckSize; i++)
-                    {
-                        deck0[i] = ids[Rng.NextInt(rng, ids.Count, out rng)];
-                        deck1[i] = ids[Rng.NextInt(rng, ids.Count, out rng)];
-                    }
-                    long gameSeed = Rng.NextUInt32(rng, out rng);
-                    var state = GameEngine.CreateGame(new GameConfig(preset.Rules, deck0, deck1, gameSeed, CardCatalog.ById));
-                    var first = state.FirstPlayer;
-
-                    while (state.Phase == Phase.Playing)
-                    {
-                        var moves = GameEngine.LegalMoves(state);
-                        var result = GameEngine.ApplyMove(state, moves[Rng.NextInt(rng, moves.Count, out rng)]);
-                        foreach (var e in result.Events)
-                        {
-                            if (e is FlipEvent) flips++;
-                        }
-                        state = result.State;
-                    }
-
-                    rounds += state.SuddenDeathRound;
-                    var r = GameEngine.Result(state).Value;
-                    if (r == GameResult.Draw) draws++;
-                    else if ((r == GameResult.P0) == (first == Player.P0)) firstWins++;
-                    else secondWins++;
+                    if (p.Profile != null && seen.Add(p.Label)) header.AppendLine("- " + p.Label + ": " + p.Profile);
                 }
-                sw.Stop();
+            }
+#if DEBUG
+            header.AppendLine("- WARNING: Debug build. Use -c Release.");
+#endif
+            Console.WriteLine(header.ToString());
 
-                Console.WriteLine("| " + preset.Name + " | " + games
-                    + " | " + Percent(firstWins, games)
-                    + " | " + Percent(secondWins, games)
-                    + " | " + Percent(draws, games)
-                    + " | " + Ratio(flips, games)
-                    + " | " + Ratio(rounds, games)
-                    + " | " + sw.ElapsedMilliseconds + " |");
+            var results = new List<MatchResult>();
+            foreach (var preset in presets)
+            {
+                foreach (var (a, b) in matches)
+                {
+                    var r = MatchRunner.Run(preset, a, b, deals, seed, threads);
+                    results.Add(r);
+                    var s = r.Stats;
+                    int decisive = s.WinsA + s.WinsB;
+                    var (lo, hi) = Report.Wilson(s.WinsA, decisive);
+                    Console.Error.WriteLine(preset.Name + " | " + a.Label + " vs " + b.Label + ": " + s.WinsA + "-" + s.WinsB + "-" + s.Draws
+                        + "  A " + (decisive == 0 ? 0 : 100.0 * s.WinsA / decisive).ToString("0.0", CultureInfo.InvariantCulture)
+                        + "% [" + (100 * lo).ToString("0.0", CultureInfo.InvariantCulture) + ", " + (100 * hi).ToString("0.0", CultureInfo.InvariantCulture)
+                        + "]  " + r.Seconds.ToString("0.0", CultureInfo.InvariantCulture) + " s");
+                }
+            }
+
+            var md = Report.Build(results, header.ToString());
+            Console.WriteLine(md);
+            if (outPath != null)
+            {
+                File.WriteAllText(outPath, md, new UTF8Encoding(false));
+                Console.Error.WriteLine("wrote " + Path.GetFullPath(outPath));
             }
             return 0;
         }
 
-        static string Percent(long count, long total) =>
-            (100.0 * count / total).ToString("0.0", CultureInfo.InvariantCulture) + "%";
-
-        static string Ratio(long sum, long total) =>
-            ((double)sum / total).ToString("0.00", CultureInfo.InvariantCulture);
+        static string CpuName()
+        {
+            try
+            {
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    using (var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\CentralProcessor\0"))
+                    {
+                        var name = key?.GetValue("ProcessorNameString") as string;
+                        if (!string.IsNullOrWhiteSpace(name)) return name.Trim();
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // 取れなければ下の値を使う
+            }
+            return Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER") ?? RuntimeInformation.ProcessArchitecture.ToString();
+        }
     }
 }

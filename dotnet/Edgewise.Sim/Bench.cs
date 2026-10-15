@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using Edgewise.Core;
+using Edgewise.Core.AI;
 using Edgewise.Core.Data;
 
 namespace Edgewise.Sim
@@ -72,6 +73,75 @@ namespace Edgewise.Sim
                 var pairs = Collect(rules, 5000);
                 Measure("ApplyMove      [" + name + "]", pairs, (s, m) => GameEngine.ApplyMove(s, m).State);
                 Measure("ApplyMoveFast  [" + name + "]", pairs, GameEngine.ApplyMoveFast);
+            }
+            Console.WriteLine();
+            SearchBench();
+        }
+
+        /// <summary>
+        /// AI 探索の速度（難易度別の秒間ノード数・1 手の思考時間・アロケーション）。
+        /// 局面はランダム手で 0〜7 手進めたもの（ルール 4 条件 × 各 60 局面）。1 スレッドで測る。
+        /// </summary>
+        static void SearchBench()
+        {
+            var presets = new[] { "basic", "spc", "all", "openoff" };
+            var positions = new List<GameState>();
+            uint rng = 2026;
+            var ids = new List<string>();
+            foreach (var c in CardCatalog.All) ids.Add(c.Id);
+            foreach (var key in presets)
+            {
+                var rules = RulePreset.Parse(key)[0].Rules;
+                for (int i = 0; i < 60; i++)
+                {
+                    int deckSize = rules.Random ? 8 : 5;
+                    var d0 = new string[deckSize];
+                    var d1 = new string[deckSize];
+                    for (int k = 0; k < deckSize; k++)
+                    {
+                        d0[k] = ids[Rng.NextInt(rng, ids.Count, out rng)];
+                        d1[k] = ids[Rng.NextInt(rng, ids.Count, out rng)];
+                    }
+                    var state = GameEngine.CreateGame(new GameConfig(rules, d0, d1, i, CardCatalog.ById));
+                    int plies = i % 8;
+                    for (int p = 0; p < plies; p++)
+                    {
+                        var moves = GameEngine.LegalMoves(state);
+                        state = GameEngine.ApplyMoveFast(state, moves[Rng.NextInt(rng, moves.Count, out rng)]);
+                    }
+                    positions.Add(state);
+                }
+            }
+
+            var ws = new SearchWorkspace();
+            Console.WriteLine("AI search (" + positions.Count + " positions: plies 0-7 x rules basic/spc/all/openoff, 1 thread)");
+            foreach (var profile in new[] { AiProfile.Easy, AiProfile.Normal, AiProfile.Hard })
+            {
+                // ウォームアップ
+                for (int i = 0; i < 10; i++) SearchSession.ChooseMove(positions[i], positions[i].Turn, profile, i, CardCatalog.All, ws);
+                long nodes = 0;
+                double maxMs = 0;
+                long allocBefore = GC.GetAllocatedBytesForCurrentThread();
+                var total = Stopwatch.StartNew();
+                for (int i = 0; i < positions.Count; i++)
+                {
+                    var s = positions[i];
+                    long t0 = Stopwatch.GetTimestamp();
+                    var session = new SearchSession(s, s.Turn, profile, i, CardCatalog.All, ws);
+                    session.Run();
+                    double ms = (Stopwatch.GetTimestamp() - t0) * 1000.0 / Stopwatch.Frequency;
+                    if (ms > maxMs) maxMs = ms;
+                    nodes += session.NodesSearched;
+                }
+                total.Stop();
+                long alloc = GC.GetAllocatedBytesForCurrentThread() - allocBefore;
+                double sec = total.Elapsed.TotalSeconds;
+                Console.WriteLine(profile.Name.PadRight(8)
+                    + (nodes / sec / 1e6).ToString("0.00", CultureInfo.InvariantCulture) + " M nodes/s  "
+                    + (nodes / (double)positions.Count).ToString("0", CultureInfo.InvariantCulture) + " nodes/move  "
+                    + (total.Elapsed.TotalMilliseconds / positions.Count).ToString("0.00", CultureInfo.InvariantCulture) + " ms/move avg  "
+                    + maxMs.ToString("0.0", CultureInfo.InvariantCulture) + " ms max  "
+                    + (alloc / positions.Count / 1024.0).ToString("0.0", CultureInfo.InvariantCulture) + " KiB alloc/move");
             }
         }
     }

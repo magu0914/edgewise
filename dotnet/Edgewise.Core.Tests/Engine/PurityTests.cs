@@ -100,6 +100,7 @@ namespace Edgewise.Core.Tests.Engine
             var files = CoreSources.Load().Select(s => s.File).ToList();
             Assert.That(files, Does.Contain("Engine/GameEngine.Apply.cs"));
             Assert.That(files, Does.Contain("Data/CardCatalog.cs"));
+            Assert.That(files, Does.Contain("AI/SearchSession.cs"));
             Assert.That(files.Count, Is.GreaterThanOrEqualTo(10));
         }
 
@@ -161,10 +162,11 @@ namespace Edgewise.Core.Tests.Engine
         {
             // 1) Core の型に可変な static フィールドがない（コンパイラ生成型は除く）
             var coreTypes = typeof(GameEngine).Assembly.GetTypes()
-                .Where(t => t.Namespace != null && (t.Namespace == "Edgewise.Core" || t.Namespace == "Edgewise.Core.Data"))
+                .Where(t => t.Namespace != null && (t.Namespace == "Edgewise.Core" || t.Namespace == "Edgewise.Core.Data" || t.Namespace == "Edgewise.Core.AI"))
                 .Where(t => !t.Name.Contains("<") && !(t.DeclaringType?.Name.Contains("<") ?? false))
                 .ToList();
             Assert.That(coreTypes, Has.Member(typeof(GameEngine)));
+            Assert.That(coreTypes, Has.Member(typeof(Edgewise.Core.AI.SearchSession)));
             foreach (var t in coreTypes)
             {
                 foreach (var f in t.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
