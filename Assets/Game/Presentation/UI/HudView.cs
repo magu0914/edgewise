@@ -165,19 +165,26 @@ namespace Edgewise.Game.UI
             }
         }
 
-        public void SetTokens(bool pivotRule, int t0, int t1)
+        /// <summary>Pivot トークンの残り（★）と使った分（☆）。max は対戦開始時の数（先攻・後攻で違うことがある）。</summary>
+        public void SetTokens(bool pivotRule, int t0, int t1, int max0 = 2, int max1 = 2)
         {
             tokens0.gameObject.SetActive(pivotRule);
             tokens1.gameObject.SetActive(pivotRule);
-            tokens0.text = UiText.PivotTokens + " " + Pips(t0);
-            tokens1.text = Pips(t1) + " " + UiText.PivotTokens;
+            tokens0.text = UiText.PivotTokens + " " + Pips(t0, max0);
+            tokens1.text = Pips(t1, max1) + " " + UiText.PivotTokens;
+            TokensText0 = tokens0.text;
+            TokensText1 = tokens1.text;
         }
 
-        static string Pips(int n)
+        /// <summary>トークン表示の文字列（テスト用）。</summary>
+        public string TokensText0 { get; private set; }
+        public string TokensText1 { get; private set; }
+
+        public static string Pips(int n, int max)
         {
             var s = "";
             for (int i = 0; i < n; i++) s += "★";
-            for (int i = n; i < 2; i++) s += "☆";
+            for (int i = n; i < max; i++) s += "☆";
             return s;
         }
 

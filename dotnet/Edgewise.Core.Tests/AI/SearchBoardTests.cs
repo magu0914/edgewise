@@ -9,7 +9,7 @@ namespace Edgewise.Core.Tests.AI
     [TestFixture]
     public class SearchBoardTests
     {
-        static void CheckAllMoves(GameState s)
+        internal static void CheckAllMoves(GameState s)
         {
             var b = AiH.LoadTrue(s);
             Assert.That(b.ComputeHashSlow(), Is.EqualTo(b.Hash));

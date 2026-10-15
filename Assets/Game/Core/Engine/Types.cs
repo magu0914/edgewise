@@ -75,7 +75,33 @@ namespace Edgewise.Core
         public const int BoardSize = 9;
         public const int BoardWidth = 3;
         public const int HandSize = 5;
+        /// <summary>
+        /// GameConfig で指定しないときの Pivot トークン数（先攻・後攻とも）。TS 版と同じ 2/2 で、ゴールデン突き合わせはこの値で行う。
+        /// ゲーム本体の既定値（先攻・後攻で非対称）は MatchPivotTokensFirst / Second（Phase 3c、docs/BALANCE.md）。
+        /// </summary>
         public const int PivotTokens = 2;
+
+        /// <summary>1 人が持てる Pivot トークンの上限（AI の Zobrist 表の大きさがこれで決まる）。</summary>
+        public const int MaxPivotTokens = 3;
+
+        /// <summary>ゲーム本体（対戦画面）で使う先攻の Pivot トークン数（Phase 3c の自己対戦で決定。docs/BALANCE.md）。</summary>
+        public const int MatchPivotTokensFirst = 1;
+
+        /// <summary>ゲーム本体（対戦画面）で使う後攻の Pivot トークン数（Sudden Death OFF のとき）。</summary>
+        public const int MatchPivotTokensSecond = 2;
+
+        /// <summary>
+        /// Sudden Death ON のときの後攻の Pivot トークン数。再戦では先攻が入れ替わりトークンは持ち越すので、
+        /// 後攻に 2 個渡すと再戦で「先攻＋トークン多め」になって後攻側に偏る（Hard 同士で本戦の先攻 43.5%）。そのため 1 個にする。
+        /// </summary>
+        public const int MatchPivotTokensSecondSuddenDeath = 1;
+
+        /// <summary>ゲーム本体で使う Pivot トークン数（先攻, 後攻）。ルールの組み合わせで決まる（docs/BALANCE.md「Phase 3c」）。</summary>
+        public static (int First, int Second) MatchPivotTokens(RuleSet rules) =>
+            rules != null && rules.SuddenDeath
+                ? (MatchPivotTokensFirst, MatchPivotTokensSecondSuddenDeath)
+                : (MatchPivotTokensFirst, MatchPivotTokensSecond);
+
         public const int MaxSuddenDeathRounds = 5;
 
         /// <summary>Same Wall で壁を表すランク（A）。</summary>

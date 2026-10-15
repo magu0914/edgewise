@@ -13,6 +13,7 @@ MonoBehaviour:
   m_Name: GameAssets
   m_EditorClassIdentifier: Edgewise.Game::Edgewise.Game.View.GameAssets
   juice: {fileID: 11400000, guid: 939c06814f5734448b42d1ffc481fa79, type: 2}
+  bgm: {fileID: 11400000, guid: 8b86b489d8beaff4682696c196b60659, type: 2}
   cardPrefab: {fileID: 4498082872981762042, guid: a3e65c458f9ff1e41965d3afc5589a3d, type: 3}
   cardMaterial: {fileID: 2100000, guid: a597f5a83da6e5049b97fbfaa85396b0, type: 2}
   shapeMaterial: {fileID: 2100000, guid: 8909f14c81936bf4caf7489537a5a46f, type: 2}

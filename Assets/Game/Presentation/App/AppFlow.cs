@@ -1,6 +1,8 @@
 using System;
 using System.Globalization;
 using System.Threading;
+using Edgewise.Core;
+using Edgewise.Game.Audio;
 using Edgewise.Game.Controls;
 using Edgewise.Game.Juice;
 using Edgewise.Game.Match;
@@ -32,6 +34,7 @@ namespace Edgewise.Game.App
         [SerializeField] MatchController match;
         [SerializeField] FpsMeter fps;
         [SerializeField] SettingsPanel settings;
+        [SerializeField] BgmPlayer bgm;
 
         MatchSettings _settings;
         MatchSettings _last;
@@ -47,15 +50,17 @@ namespace Edgewise.Game.App
         public MenuPanel Menu => menu;
         public FpsMeter Fps => fps;
         public SettingsPanel Settings => settings;
+        public BgmPlayer Bgm => bgm;
         public MatchOutcome LastOutcome { get; private set; }
 
         /// <summary>結果画面のボタンが押せる状態になったか（テスト用）。</summary>
         public bool ResultReady { get; private set; }
 
         public void Wire(GameAssets a, GameObject tableRoot, TitleScreen t, SetupScreen s, HudView h, MenuPanel m, ResultScreen r, BannerView b,
-            MatchController mc, FpsMeter f, SettingsPanel sp)
+            MatchController mc, FpsMeter f, SettingsPanel sp, BgmPlayer music)
         {
             settings = sp;
+            bgm = music;
             assets = a;
             table = tableRoot;
             title = t;
@@ -73,6 +78,7 @@ namespace Edgewise.Game.App
             ReadUrl();
             _settings = MatchSettings.Load();
             title.StartPressed += ShowSetup;
+            title.SettingsPressed += OpenSettingsFromTitle;
             setup.BeginPressed += s => StartMatch(s);
             setup.BackPressed += ShowTitle;
             result.AgainPressed += () => StartMatch(_last ?? _settings);
@@ -96,6 +102,7 @@ namespace Edgewise.Game.App
             {
                 if (match.State != null && match.IsRunning) menu.Open(match.State.Rules);
                 else Controls.Blocked = false;
+                if (title.gameObject.activeSelf) EventSystem.current?.SetSelectedGameObject(title.SettingsButton.gameObject);
             };
             hud.HintPressed += () => match.RequestHint();
             Controls.MenuRequested += OpenMenu;
@@ -188,6 +195,7 @@ namespace Edgewise.Game.App
             HideAll();
             table.SetActive(false);
             title.Show();
+            PlayBgm(BgmCue.Title);
             AutomationLog.Buttons("Title", title.transform);
         }
 
@@ -196,6 +204,7 @@ namespace Edgewise.Game.App
             HideAll();
             table.SetActive(false);
             setup.Show(_settings);
+            PlayBgm(BgmCue.Title);
             AutomationLog.Buttons("Setup", setup.transform);
         }
 
@@ -212,6 +221,7 @@ namespace Edgewise.Game.App
             ResultReady = false;
             LastOutcome = null;
             AutomationLog.Buttons("Hud", hud.transform);
+            PlayBgm(BgmCue.Match);
             RunMatch(_last);
         }
 
@@ -243,7 +253,7 @@ namespace Edgewise.Game.App
                 // 決着: 盤のカードが勝者の色に順に光る → スコアのカウントアップ → 勝敗の文字（と勝ち・負け・引き分けの音）
                 await match.PlayFinaleAsync(outcome, ct);
                 await result.Show(outcome.Score, outcome.Result, outcome.Resigned, assets.juice, UserPrefs.TimeFactor, ct,
-                    () => match.Fx.OnEnd(outcome.Result), _ => match.Fx.OnCursorMove());
+                    () => OnResultShown(outcome.Result), _ => match.Fx.OnCursorMove());
                 ResultReady = true;
                 AutomationLog.Buttons("Result", result.transform);
             }
@@ -254,6 +264,33 @@ namespace Edgewise.Game.App
             {
                 Debug.LogException(e);
             }
+        }
+
+        /// <summary>
+        /// 勝敗の文字が出た瞬間: 勝利・敗北・引き分けの BGM に切り替える（席 0 から見た勝敗）。
+        /// その場面に曲が割り当てられていなければ、3b の合成音のジングル（効果音）を鳴らす。
+        /// </summary>
+        void OnResultShown(GameResult resultForSeat0)
+        {
+            var cue = resultForSeat0 == GameResult.P0 ? BgmCue.Victory : resultForSeat0 == GameResult.P1 ? BgmCue.Defeat : BgmCue.Draw;
+            if (!PlayBgm(cue)) match.Fx.OnEnd(resultForSeat0);
+        }
+
+        /// <summary>場面の BGM に切り替える。曲が割り当てられていれば true（未設定なら無音）。</summary>
+        bool PlayBgm(BgmCue cue)
+        {
+            if (bgm == null) return false;
+            bool changed = bgm.CurrentCue != cue;
+            bool has = bgm.Play(cue);
+            if (changed && AutomationLog.Enabled) AutomationLog.Write("bgm " + cue + (has ? "" : " silent"));
+            return has;
+        }
+
+        void OpenSettingsFromTitle()
+        {
+            if (settings.IsOpen) return;
+            settings.Open();
+            AutomationLog.Buttons("Settings", settings.transform);
         }
 
         void OpenMenu()

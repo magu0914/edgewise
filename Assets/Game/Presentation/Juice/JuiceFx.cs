@@ -8,7 +8,7 @@ using UnityEngine;
 namespace Edgewise.Game.Juice
 {
     /// <summary>
-    /// 演出の味付け（Phase 3b）: 効果音・ヒットストップ・画面の揺れ。EventPlayer と PlayerController が節目ごとに呼ぶ（IMatchFx）。
+    /// 演出の味付け（Phase 3b）: 効果音・ヒットストップ・画面の揺れ・BGM のダッキング（3c）。EventPlayer と PlayerController が節目ごとに呼ぶ（IMatchFx）。
     /// 光（白い光・光の輪）は EventPlayer が直接出す。値はすべて JuiceSettings。
     /// 演出速度「即時」のときは、ヒットストップ・揺れ・裏返しの音を出さない（一度に大量に鳴るのを避ける）。
     /// </summary>
@@ -17,16 +17,18 @@ namespace Edgewise.Game.Juice
         [SerializeField] JuiceSettings juice;
         [SerializeField] SfxBank sfx;
         [SerializeField] TableLayout layout;
+        [SerializeField] BgmPlayer bgm;
 
         readonly ShakeModel _shake = new ShakeModel();
 
         public ShakeModel Shake => _shake;
 
-        public void Wire(JuiceSettings j, SfxBank s, TableLayout l)
+        public void Wire(JuiceSettings j, SfxBank s, TableLayout l, BgmPlayer b)
         {
             juice = j;
             sfx = s;
             layout = l;
+            bgm = b;
         }
 
         static bool Animated => UserPrefs.TimeFactor > 0f;
@@ -74,6 +76,8 @@ namespace Edgewise.Game.Juice
         {
             if (!Animated) return;
             Play(rule == RuleHeading.Plus ? SfxKind.Plus : SfxKind.Same);
+            // BGM を一瞬下げて SAME! / PLUS! を立たせる（§8-2 ダッキング）
+            if (bgm != null) bgm.Duck();
             TweenRunner.HitStop(juice.ruleHitStop);
             _shake.Add(juice.ruleShake);
         }
@@ -82,6 +86,8 @@ namespace Edgewise.Game.Juice
         {
             if (!Animated) return;
             Play(SfxKind.Combo, Mathf.Min(2f * (depth - 1), 7f));
+            // 連鎖が深いほど BGM を下げたままにする時間を延ばす
+            if (bgm != null) bgm.Duck(1f + 0.25f * (depth - 1));
             // 段ごとに 50ms のヒットストップと、段が深いほど強い揺れ
             TweenRunner.HitStop(juice.comboHitStop);
             _shake.Add(juice.comboShakePerDepth * depth);

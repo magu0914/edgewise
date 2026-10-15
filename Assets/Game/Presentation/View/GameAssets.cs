@@ -11,6 +11,9 @@ namespace Edgewise.Game.View
     public sealed class GameAssets : ScriptableObject
     {
         public JuiceSettings juice;
+
+        /// <summary>場面ごとの BGM の割り当て（3c）。曲が未設定の場面は無音。</summary>
+        public Edgewise.Game.Audio.BgmLibrary bgm;
         public CardView cardPrefab;
         public Material cardMaterial;
         public Material shapeMaterial;

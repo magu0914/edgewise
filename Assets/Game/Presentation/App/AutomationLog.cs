@@ -23,13 +23,13 @@ namespace Edgewise.Game.App
 
         static string F(float v) => Mathf.RoundToInt(v).ToString(CultureInfo.InvariantCulture);
 
-        /// <summary>root 以下の有効なボタンの位置を出す。</summary>
+        /// <summary>root 以下の有効なボタン・スライダー（Selectable）の位置を出す。</summary>
         public static void Buttons(string screen, Transform root)
         {
             if (!Enabled) return;
             Write("screen " + screen + " " + Screen.width + "x" + Screen.height);
             var corners = new Vector3[4];
-            foreach (var b in root.GetComponentsInChildren<Button>(false))
+            foreach (var b in root.GetComponentsInChildren<Selectable>(false))
             {
                 var rt = (RectTransform)b.transform;
                 rt.GetWorldCorners(corners);

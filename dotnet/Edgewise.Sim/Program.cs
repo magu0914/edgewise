@@ -13,7 +13,8 @@ namespace Edgewise.Sim
     /// 使い方:
     ///   dotnet run -c Release --project dotnet/Edgewise.Sim -- [options]
     ///     --match A:B        対戦（複数可・カンマ区切り可）。A/B = random | easy | normal | hard、"hard@200000" でノード予算を上書き
-    ///     --rules LIST       ルールのプリセット（カンマ区切り）。default = basic,spc,all,openoff。他: spc-openoff, all-openoff, same, plus, ...
+    ///     --rules LIST       ルールのプリセット（カンマ区切り）。default = basic,spc,all,openoff。他: spc-openoff, all-openoff, same, plus, pivot, all-nopivot, ...
+    ///     --pivot LIST       Pivot トークン数の候補「先攻/後攻」（カンマ区切り。例 2/2,1/2,2/3。game = ゲーム本体の既定値）。Pivot ON のプリセットを候補ごとの行にする
     ///     --deals N          配牌の数（各配牌を席を入れ替えて 2 局。既定 500 → 1000 局）
     ///     --games N          局数で指定（--deals N/2 と同じ）
     ///     --seed S           乱数の seed（配牌・先攻・AI の乱数がすべてこれで決まる）
@@ -27,6 +28,7 @@ namespace Edgewise.Sim
         {
             var matches = new List<(PlayerSpec, PlayerSpec)>();
             string rules = "default";
+            string pivot = null;
             int deals = 500;
             long seed = 1;
             int threads = Environment.ProcessorCount;
@@ -49,6 +51,7 @@ namespace Edgewise.Sim
                             }
                             break;
                         case "--rules": rules = Next(); break;
+                        case "--pivot": pivot = Next(); break;
                         case "--deals": deals = int.Parse(Next(), CultureInfo.InvariantCulture); break;
                         case "--games": deals = Math.Max(1, int.Parse(Next(), CultureInfo.InvariantCulture) / 2); break;
                         case "--seed": seed = long.Parse(Next(), CultureInfo.InvariantCulture); break;
@@ -62,7 +65,7 @@ namespace Edgewise.Sim
             catch (Exception e) when (e is ArgumentException || e is FormatException)
             {
                 Console.Error.WriteLine(e.Message);
-                Console.Error.WriteLine("usage: Edgewise.Sim [--match A:B[,C:D]] [--rules LIST] [--deals N | --games N] [--seed S] [--threads T] [--out PATH] [--bench]");
+                Console.Error.WriteLine("usage: Edgewise.Sim [--match A:B[,C:D]] [--rules LIST] [--pivot F/S[,F/S]] [--deals N | --games N] [--seed S] [--threads T] [--out PATH] [--bench]");
                 return 2;
             }
 
@@ -73,7 +76,16 @@ namespace Edgewise.Sim
             }
             if (matches.Count == 0) matches.Add((PlayerSpec.Parse("random"), PlayerSpec.Parse("random")));
 
-            var presets = RulePreset.Parse(rules);
+            List<RulePreset> presets;
+            try
+            {
+                presets = RulePreset.ExpandPivot(RulePreset.Parse(rules), pivot);
+            }
+            catch (Exception e) when (e is ArgumentException || e is FormatException)
+            {
+                Console.Error.WriteLine(e.Message);
+                return 2;
+            }
             var header = new StringBuilder();
             header.AppendLine("## Edgewise.Sim");
             header.AppendLine();
@@ -107,7 +119,9 @@ namespace Edgewise.Sim
                     Console.Error.WriteLine(preset.Name + " | " + a.Label + " vs " + b.Label + ": " + s.WinsA + "-" + s.WinsB + "-" + s.Draws
                         + "  A " + (decisive == 0 ? 0 : 100.0 * s.WinsA / decisive).ToString("0.0", CultureInfo.InvariantCulture)
                         + "% [" + (100 * lo).ToString("0.0", CultureInfo.InvariantCulture) + ", " + (100 * hi).ToString("0.0", CultureInfo.InvariantCulture)
-                        + "]  " + r.Seconds.ToString("0.0", CultureInfo.InvariantCulture) + " s");
+                        + "]  first " + (decisive == 0 ? 0 : 100.0 * s.FirstWins / decisive).ToString("0.0", CultureInfo.InvariantCulture)
+                        + "% (1/deal " + FirstPerDeal(s) + ")  draws " + (s.Games == 0 ? 0 : 100.0 * s.Draws / s.Games).ToString("0.0", CultureInfo.InvariantCulture)
+                        + "%  " + r.Seconds.ToString("0.0", CultureInfo.InvariantCulture) + " s");
                 }
             }
 
@@ -119,6 +133,15 @@ namespace Edgewise.Sim
                 Console.Error.WriteLine("wrote " + Path.GetFullPath(outPath));
             }
             return 0;
+        }
+
+        static string FirstPerDeal(Stats s)
+        {
+            int n = s.FirstWins1 + s.SecondWins1;
+            var (lo, hi) = Report.Wilson(s.FirstWins1, n);
+            var inv = CultureInfo.InvariantCulture;
+            return (n == 0 ? 0 : 100.0 * s.FirstWins1 / n).ToString("0.0", inv) + "% [" + (100 * lo).ToString("0.0", inv) + ", "
+                + (100 * hi).ToString("0.0", inv) + "]";
         }
 
         static string CpuName()

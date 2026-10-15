@@ -81,6 +81,15 @@ namespace Edgewise.Sim
         public const int Plies = 9;
 
         public int Games, WinsA, WinsB, Draws, FirstWins, SecondWins;
+
+        /// <summary>
+        /// 配牌ごとの 1 局目（A が席 0）だけの先攻勝ち・後攻勝ち・引き分け。ノイズのない CPU 同士（Open ON の Hard 同士など）は
+        /// 席を入れ替えた 2 局が鏡写しで同じ結果になり、2 局を独立とみなすと信頼区間が狭く出すぎるので、合否はこちらの区間で見る。
+        /// </summary>
+        public int FirstWins1, SecondWins1, Draws1;
+
+        /// <summary>Sudden Death の再戦まで行った局の、本戦の先攻の勝ち・負け（再戦では先攻が入れ替わり、Pivot トークンは持ち越す）。</summary>
+        public int FirstWinsRematch, SecondWinsRematch;
         public readonly long[] FlipsByCause = new long[4];
         public int MaxChain;
         public long SumMaxChain;
@@ -97,14 +106,30 @@ namespace Edgewise.Sim
         /// <summary>[side*3 + 最初に読み切った時点の予想（0 勝ち, 1 引き分け, 2 負け）, 実際の結果（同）]。Open ON（世界 1 つ）の本戦のみ。</summary>
         public readonly long[,] FirstSolved = new long[6, 3];
 
+        /// <summary>役割別（0 = 本戦の先攻、1 = 本戦の後攻）の Pivot 使用回数（Sudden Death の再戦を含む 1 局全体）。</summary>
+        public readonly long[] PivotByRole = new long[2];
+
+        /// <summary>役割別に、1 局で 1 回以上回転した局の数。</summary>
+        public readonly long[] GamesRotatedByRole = new long[2];
+
         public void Add(Stats o)
         {
+            for (int r = 0; r < 2; r++)
+            {
+                PivotByRole[r] += o.PivotByRole[r];
+                GamesRotatedByRole[r] += o.GamesRotatedByRole[r];
+            }
             Games += o.Games;
             WinsA += o.WinsA;
             WinsB += o.WinsB;
             Draws += o.Draws;
             FirstWins += o.FirstWins;
             SecondWins += o.SecondWins;
+            FirstWins1 += o.FirstWins1;
+            SecondWins1 += o.SecondWins1;
+            Draws1 += o.Draws1;
+            FirstWinsRematch += o.FirstWinsRematch;
+            SecondWinsRematch += o.SecondWinsRematch;
             for (int i = 0; i < 4; i++) FlipsByCause[i] += o.FlipsByCause[i];
             MaxChain = Math.Max(MaxChain, o.MaxChain);
             SumMaxChain += o.SumMaxChain;
@@ -156,7 +181,7 @@ namespace Edgewise.Sim
                 () => new SearchWorkspace(),
                 (i, _, ws) =>
                 {
-                    perDeal[i] = PlayDeal(preset.Rules, a, b, DealSeed(seed, i), ws);
+                    perDeal[i] = PlayDeal(preset, a, b, DealSeed(seed, i), ws);
                     return ws;
                 },
                 _ => { });
@@ -172,8 +197,9 @@ namespace Edgewise.Sim
             return Rng.NextUInt32(s, out _);
         }
 
-        static Stats PlayDeal(RuleSet rules, PlayerSpec a, PlayerSpec b, long dealSeed, SearchWorkspace ws)
+        static Stats PlayDeal(RulePreset preset, PlayerSpec a, PlayerSpec b, long dealSeed, SearchWorkspace ws)
         {
+            var rules = preset.Rules;
             // 配牌: 50 枚から重複なしで両者のデッキを作る（Random ON なら 8 枚ずつ、OFF なら 5 枚ずつ）
             var all = CardCatalog.All;
             int deckSize = rules.Random ? 8 : GameConstants.HandSize;
@@ -196,8 +222,10 @@ namespace Edgewise.Sim
             var stats = new Stats();
             for (int aSeat = 0; aSeat < 2; aSeat++)
             {
-                var state = GameEngine.CreateGame(new GameConfig(rules, deck0, deck1, gameSeed, CardCatalog.ById));
+                var state = GameEngine.CreateGame(new GameConfig(rules, deck0, deck1, gameSeed, CardCatalog.ById,
+                    preset.PivotFirst, preset.PivotSecond));
                 var first = state.FirstPlayer;
+                var rotatedByRole = new int[2];
                 uint moveRng = Rng.SeedToState(gameSeed ^ (aSeat * 0x7777L));
                 int ply = 0;
                 int maxChain = 0;
@@ -252,7 +280,11 @@ namespace Edgewise.Sim
                     stats.MaxTicks[side] = Math.Max(stats.MaxTicks[side], dt);
                     stats.Moves[side]++;
                     stats.MovesByPly[side, roundPly]++;
-                    if (move.Rotation != 0) stats.PivotByPly[side, roundPly]++;
+                    if (move.Rotation != 0)
+                    {
+                        stats.PivotByPly[side, roundPly]++;
+                        rotatedByRole[state.Turn == first ? 0 : 1]++;
+                    }
 
                     var result = GameEngine.ApplyMove(state, move);
                     foreach (var e in result.Events)
@@ -268,6 +300,11 @@ namespace Edgewise.Sim
                 }
 
                 stats.Games++;
+                for (int role = 0; role < 2; role++)
+                {
+                    stats.PivotByRole[role] += rotatedByRole[role];
+                    if (rotatedByRole[role] > 0) stats.GamesRotatedByRole[role]++;
+                }
                 stats.SuddenDeathRounds += state.SuddenDeathRound;
                 stats.MaxChain = Math.Max(stats.MaxChain, maxChain);
                 stats.SumMaxChain += maxChain;
@@ -283,13 +320,25 @@ namespace Edgewise.Sim
                 if (res == GameResult.Draw)
                 {
                     stats.Draws++;
+                    if (aSeat == 0) stats.Draws1++;
                 }
                 else
                 {
                     if ((int)res == aSeat) stats.WinsA++;
                     else stats.WinsB++;
-                    if ((Player)(int)res == first) stats.FirstWins++;
+                    bool firstWon = (Player)(int)res == first;
+                    if (firstWon) stats.FirstWins++;
                     else stats.SecondWins++;
+                    if (state.SuddenDeathRound > 0)
+                    {
+                        if (firstWon) stats.FirstWinsRematch++;
+                        else stats.SecondWinsRematch++;
+                    }
+                    if (aSeat == 0)
+                    {
+                        if (firstWon) stats.FirstWins1++;
+                        else stats.SecondWins1++;
+                    }
                 }
             }
             return stats;

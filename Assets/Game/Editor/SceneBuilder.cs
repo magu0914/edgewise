@@ -70,8 +70,14 @@ namespace Edgewise.EditorTools
             var fps = game.AddComponent<FpsMeter>();
             var sfx = game.AddComponent<SfxBank>();
             sfx.Wire(assets.juice);
+            // BGM（3c）: 曲の割り当ては BgmLibrary。AudioSource を持つので、効果音とは別の GameObject にする
+            var bgmGo = new GameObject("Bgm");
+            bgmGo.transform.SetParent(game.transform, false);
+            var bgm = bgmGo.AddComponent<BgmPlayer>();
+            bgm.Wire(assets.bgm);
+            bgmGo.AddComponent<BackgroundAudio>();
             var juiceFx = game.AddComponent<JuiceFx>();
-            juiceFx.Wire(assets.juice, sfx, layout);
+            juiceFx.Wire(assets.juice, sfx, layout, bgm);
             var flow = game.AddComponent<AppFlow>();
 
             // ---- UI ----
@@ -113,10 +119,10 @@ namespace Edgewise.EditorTools
             module.AssignDefaultActions();
 
             match.Wire(assets, board, hand0, hand1, hud, banner, layout, player, cards, juiceFx);
-            flow.Wire(assets, table, title, setup, hud, menu, result, banner, match, fps, settings);
+            flow.Wire(assets, table, title, setup, hud, menu, result, banner, match, fps, settings, bgm);
             table.SetActive(false);
 
-            foreach (var c in new Component[] { layout, match, flow, board, hud, title, setup, result, menu, banner, settings, sfx, juiceFx })
+            foreach (var c in new Component[] { layout, match, flow, board, hud, title, setup, result, menu, banner, settings, sfx, juiceFx, bgm })
                 EditorUtility.SetDirty(c);
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene, path);

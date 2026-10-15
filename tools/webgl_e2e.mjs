@@ -296,6 +296,154 @@ async function playMatch({ wantPreview, wantFlip, wantRule, wantPivot, wantKeybo
   }
 }
 
+// ---------------------------------------------------------------------------
+// Phase 3c: 音のオプション（設定画面の操作・横/縦の撮影・タブが裏に回ったら消音）と、Pivot ON の対戦設定、1 局。
+//   node tools/webgl_e2e.mjs --scenario 3c --url http://127.0.0.1:8765/ --out Logs/shots/3c --pivot-first 1 --pivot-second 2
+// ---------------------------------------------------------------------------
+
+/** スライダーの左端から ratio（0..1）の位置をクリックする（uGUI の Slider はその位置へ値が飛ぶ）。 */
+async function clickSlider(screen, name, ratio, from) {
+  let r = null;
+  for (let i = from; i < consoleLines.length; i++) {
+    const m = consoleLines[i].line.match(new RegExp('^ui ' + screen + '/' + name + ' (-?\\d+) (-?\\d+) (\\d+) (\\d+)'));
+    if (m) r = { x: +m[1], y: +m[2], w: +m[3], h: +m[4] };
+  }
+  if (!r) throw new Error('no slider rect for ' + screen + '/' + name);
+  // つまみの可動域は両端からつまみの幅の半分だけ内側（横 30・縦 52 の基準。画面の倍率を掛けて概算）
+  const inset = r.h * 0.5;
+  const x = r.x + inset + (r.w - 2 * inset) * ratio;
+  await click(x, r.y + r.h / 2);
+}
+
+/** 直近の "settings master=.. bgm=.. sfx=.. mute=.. bgmute=.." を待って値を返す。 */
+async function waitSettings(pred, from, what) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < 8000) {
+    for (let i = consoleLines.length - 1; i >= from; i--) {
+      const m = consoleLines[i].line.match(/^settings master=(\d+) bgm=(\d+) sfx=(\d+) mute=(\d) bgmute=(\d)/);
+      if (m) {
+        const s = { master: +m[1], bgm: +m[2], sfx: +m[3], mute: +m[4], bgmute: +m[5], index: i };
+        if (pred(s)) return s;
+        break;
+      }
+    }
+    await sleep(40);
+  }
+  throw new Error('settings did not reach: ' + what + '\nlast lines:\n' + consoleLines.slice(-10).map((l) => l.line).join('\n'));
+}
+
+async function setHidden(hidden) {
+  const state = hidden ? 'hidden' : 'visible';
+  await send('Runtime.evaluate', {
+    expression: `Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => '${state}' });`
+      + `Object.defineProperty(document, 'hidden', { configurable: true, get: () => ${hidden} });`
+      + `document.dispatchEvent(new Event('visibilitychange')); 1`,
+  });
+}
+
+async function run3c() {
+  const checks = {};
+  const url = `${BASE}?log&seed=${SEED}&slow=1`;
+  log('open', url);
+  await send('Page.navigate', { url });
+
+  // 1. タイトル → 設定（横）
+  const tAt = (await waitLine(/^screen Title/, 120000)).index;
+  checks.titleBgm = consoleLines.slice(0, tAt + 1).map((l) => l.line).filter((l) => /^bgm /.test(l));
+  await sleep(1200);
+  await click(...Object.values(uiRect('Title', 'TitleSettingsButton', tAt)));
+  const sAt = (await waitLine(/^screen Settings/, 5000)).index;
+  await sleep(500);
+  await shot('01_settings_landscape');
+
+  // スライダー（マウスでトラックをクリック → その位置へ。5% 刻みで保存）
+  await clickSlider('Settings', 'BgmSlider', 0.25, sAt);
+  const s1 = await waitSettings((s) => s.bgm >= 15 && s.bgm <= 35 && s.bgm % 5 === 0, sAt, 'bgm ≈ 25%');
+  await clickSlider('Settings', 'MasterSlider', 0.5, sAt);
+  const s2 = await waitSettings((s) => s.master >= 40 && s.master <= 60, s1.index, 'master ≈ 50%');
+  // キーボード: 選ばれているスライダーを → で 1 段（5%）上げる
+  await key('ArrowRight');
+  const s3 = await waitSettings((s) => s.master === s2.master + 5, s2.index, 'master +5 by keyboard');
+  await click(...Object.values(uiRect('Settings', 'MuteButton', sAt)));
+  const s4 = await waitSettings((s) => s.mute === 1, s3.index, 'mute ON');
+  await sleep(250);
+  await shot('02_settings_muted');
+  await click(...Object.values(uiRect('Settings', 'MuteButton', sAt)));
+  const s5 = await waitSettings((s) => s.mute === 0, s4.index, 'mute OFF');
+  checks.settingsLandscape = { bgm: s1.bgm, master: s2.master, keyboard: s3.master, mute: [s4.mute, s5.mute] };
+
+  // タブが裏に回ったら消音（初期値 ON）: visibilitychange で AudioContext を suspend → 表に戻ったら resume
+  const hAt = consoleLines.length;
+  await setHidden(true);
+  checks.hidden = (await waitLine(/^audio (suspended|tab hidden)/, 5000, hAt)).line;
+  if (!/^audio suspended/.test(checks.hidden)) throw new Error('the AudioContext was not suspended: ' + checks.hidden);
+  await setHidden(false);
+  try { checks.visible = (await waitLine(/^audio resumed/, 5000, hAt)).line; } catch { checks.visible = 'no resume line (context was not running)'; }
+  // OFF にすると裏に回っても止めない
+  await click(...Object.values(uiRect('Settings', 'BackgroundMuteButton', sAt)));
+  const s6 = await waitSettings((s) => s.bgmute === 0, s5.index, 'bgmute OFF');
+  const h2 = consoleLines.length;
+  await setHidden(true);
+  checks.hiddenWhenOff = (await waitLine(/^audio /, 5000, h2)).line;
+  await setHidden(false);
+  await click(...Object.values(uiRect('Settings', 'BackgroundMuteButton', sAt)));
+  await waitSettings((s) => s.bgmute === 1, s6.index, 'bgmute ON again');
+
+  // 2. 縦画面 360x640 の設定画面（操作もする）
+  await send('Emulation.setDeviceMetricsOverride', { width: 360, height: 640, deviceScaleFactor: 1, mobile: false });
+  const pAt = (await waitLine(/^screen Portrait/, 10000, sAt)).index;
+  await sleep(600);
+  await shot('03_settings_portrait_360x640');
+  const before = consoleLines.length;
+  await clickSlider('Portrait', 'SfxSlider', 0.75, pAt);
+  const p1 = await waitSettings((s) => s.sfx >= 65 && s.sfx <= 85, before, 'sfx ≈ 75% (portrait)');
+  await click(...Object.values(uiRect('Portrait', 'ShakeButton', pAt)));
+  await sleep(150);
+  await click(...Object.values(uiRect('Portrait', 'ShakeButton', pAt)));
+  checks.settingsPortrait = { sfx: p1.sfx };
+  await sleep(300);
+  await shot('04_settings_portrait_after');
+  // 横に戻して閉じる
+  await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
+  const lAt = (await waitLine(/^screen Landscape/, 10000, pAt)).index;
+  await sleep(300);
+  await click(...Object.values(uiRect('Landscape', 'CloseButton', lAt)));
+  await sleep(300);
+
+  // 3. 対戦設定（Pivot ON）
+  await click(...Object.values(uiRect('Landscape', 'StartButton', lAt)));
+  const setupAt = (await waitLine(/^screen Setup/, 10000, lAt)).index;
+  await sleep(600);
+  await shot('05_setup_pivot_on');
+  await click(...Object.values(uiRect('Setup', 'BeginButton', setupAt)));
+
+  // 4. 1 局（マウス・Pivot・メニューから設定を開く）
+  const mAt = (await waitLine(/^match seed=\d+ rules=(\d+) first=(\d)/, 20000, setupAt));
+  const first = +mAt.m[2];
+  const firstTurn = await waitLine(/^await turn=(\d) hand=(\d+) pivot=(\d+)/, 120000, mAt.index);
+  cursor = firstTurn.index;
+  const myTokens = +firstTurn.m[3];
+  const expectFirst = args['pivot-first'] !== undefined ? +args['pivot-first'] : null;
+  const expectSecond = args['pivot-second'] !== undefined ? +args['pivot-second'] : null;
+  checks.pivot = { humanIsFirst: first === 0, tokensAtFirstTurn: myTokens, expectFirst, expectSecond };
+  if (expectFirst !== null) {
+    const want = first === 0 ? expectFirst : expectSecond;
+    // 後攻なら CPU の 1 手目は自分のトークンを減らさない
+    if (myTokens !== want) throw new Error(`pivot tokens: got ${myTokens}, want ${want} (human first=${first === 0})`);
+  }
+  await sleep(300);
+  await shot('06_match_start');
+  const r = await playMatch({ wantPreview: false, wantFlip: false, wantRule: false, wantPivot: myTokens > 0, wantKeyboard: false, wantMenu: true });
+  log('match finished', r.moves, 'moves', JSON.stringify(r.got));
+  const resAt = (await waitLine(/^screen Result/, 60000)).index;
+  await sleep(800);
+  await shot('07_result');
+  checks.bgmLines = consoleLines.map((l) => l.line).filter((l) => /^bgm /.test(l));
+  checks.match = r.got;
+  results.checks = checks;
+  log('checks', JSON.stringify(checks));
+}
+
 let exitCode = 0;
 try {
   await connect();
@@ -304,6 +452,10 @@ try {
   await send('Runtime.enable');
   await send('Page.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
+  if (args.scenario === '3c') {
+    await run3c();
+    throw { done: true };
+  }
   const url = `${BASE}?log&seed=${SEED}&slow=${SLOW}`;
   log('open', url);
   await send('Page.navigate', { url });
@@ -410,8 +562,10 @@ try {
 
   results.fps = consoleLines.filter((l) => /^fps/.test(l.line)).map((l) => l.line);
 } catch (e) {
-  exitCode = 1;
-  console.error('[e2e] FAILED', e.message);
+  if (!e?.done) {
+    exitCode = 1;
+    console.error('[e2e] FAILED', e.message);
+  }
 } finally {
   results.errors = consoleLines.filter((l) => /^(CONSOLE|EXCEPTION)/.test(l.line)).map((l) => l.line);
   writeFileSync(join(OUT, 'e2e_log.txt'), consoleLines.map((l) => l.line).join('\n'));

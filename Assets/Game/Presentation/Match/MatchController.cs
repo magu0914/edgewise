@@ -49,6 +49,8 @@ namespace Edgewise.Game.Match
         bool _resignRequested;
         readonly HintEngine _hint = new HintEngine();
         bool _hintShown;
+        int _tokensMax0 = GameConstants.PivotTokens;
+        int _tokensMax1 = GameConstants.PivotTokens;
 
         public GameState State { get; private set; }
         public MatchSettings Settings { get; private set; }
@@ -169,8 +171,12 @@ namespace Edgewise.Game.Match
                 long seed = settings.seed != 0 ? settings.seed : (DateTime.Now.Ticks & 0x7fffffffL) | 1L;
                 var rules = settings.ToRuleSet();
                 var (d0, d1) = Dealer.Deal(settings.band, settings.random, seed);
-                State = GameEngine.CreateGame(new GameConfig(rules, d0, d1, seed, CardCatalog.ById));
+                // Pivot のトークンは先攻・後攻で非対称（Phase 3c の自己対戦で決めた値。docs/BALANCE.md）
+                var tokens = GameConstants.MatchPivotTokens(rules);
+                State = GameEngine.CreateGame(new GameConfig(rules, d0, d1, seed, CardCatalog.ById, tokens.First, tokens.Second));
                 _rng = Rng.SeedToState(seed ^ 0x2545F491L);
+                _tokensMax0 = State.GetPivotTokens(Player.P0);
+                _tokensMax1 = State.GetPivotTokens(Player.P1);
                 if (AutomationLog.Enabled) AutomationLog.Write("match seed=" + seed + " rules=" + rules.ToBitString() + " first=" + (int)State.FirstPlayer);
 
                 await SetupViewsAsync(ct);
@@ -442,7 +448,7 @@ namespace Edgewise.Game.Match
 
         void UpdateHud()
         {
-            hud.SetTokens(State.Rules.Pivot, State.GetPivotTokens(Player.P0), State.GetPivotTokens(Player.P1));
+            hud.SetTokens(State.Rules.Pivot, State.GetPivotTokens(Player.P0), State.GetPivotTokens(Player.P1), _tokensMax0, _tokensMax1);
         }
     }
 }

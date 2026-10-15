@@ -134,7 +134,7 @@ namespace Edgewise.Game.UI
             Line(r.Combo, UiText.RuleCombo, UiText.RuleComboDesc);
             Line(r.Elemental, UiText.RuleElemental, UiText.RuleElementalDesc);
             Line(r.SuddenDeath, UiText.RuleSuddenDeath, UiText.RuleSuddenDeathDesc);
-            Line(r.Pivot, UiText.RulePivot, UiText.RulePivotDesc);
+            Line(r.Pivot, UiText.RulePivot, UiText.PivotDesc(r.SuddenDeath));
             if (!any) sb.Append(UiText.NoRules);
             return sb.ToString();
         }

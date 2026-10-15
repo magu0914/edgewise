@@ -11,7 +11,8 @@ namespace Edgewise.Core.AI
         const int OwnerBase = PlaceCount;
         const int HandBase = OwnerBase + GameConstants.BoardSize;
         const int PivotBase = HandBase + 2 * SearchBoard.MaxSlots;
-        const int TurnIndex = PivotBase + 2 * 4;
+        const int PivotStride = GameConstants.MaxPivotTokens + 1; // トークン 0..Max（3 なら従来どおり 4 で、表の値は変わらない）
+        const int TurnIndex = PivotBase + 2 * PivotStride;
         const int Count = TurnIndex + 1;
 
         static readonly ulong[] Keys = Build();
@@ -35,7 +36,7 @@ namespace Edgewise.Core.AI
 
         public static ulong Hand(int player, int slot) => Keys[HandBase + player * SearchBoard.MaxSlots + slot];
 
-        public static ulong PivotKey(int player, int tokens) => Keys[PivotBase + player * 4 + tokens];
+        public static ulong PivotKey(int player, int tokens) => Keys[PivotBase + player * PivotStride + tokens];
 
         public static ulong TurnKey => Keys[TurnIndex];
     }

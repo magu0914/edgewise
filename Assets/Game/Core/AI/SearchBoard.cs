@@ -105,9 +105,10 @@ namespace Edgewise.Core.AI
             if (Turn == 1) Hash ^= Zobrist.TurnKey;
             for (int p = 0; p < 2; p++)
             {
+                // 先攻・後攻で数が違ってよい（Phase 3c）。Zobrist 表は 0..MaxPivotTokens の分だけある
                 int t = state.GetPivotTokens((Player)p);
                 if (t < 0) t = 0;
-                if (t > 3) t = 3;
+                if (t > GameConstants.MaxPivotTokens) t = GameConstants.MaxPivotTokens;
                 Pivot[p] = t;
                 Hash ^= Zobrist.PivotKey(p, t);
             }

@@ -259,6 +259,7 @@ namespace Edgewise.Tests.PlayMode
             var pc = _app.Controls;
             int placed = 0;
             bool rotated = false;
+            int startTokens = -1;
             float t = 0f;
             while (!_app.ResultReady && t < TimeoutSeconds)
             {
@@ -266,6 +267,8 @@ namespace Edgewise.Tests.PlayMode
                 if (pc.IsAwaitingMove)
                 {
                     var state = pc.State;
+                    // Pivot のトークンは先攻・後攻で数が違う（3c）。最初の手番での数を覚えておく
+                    if (startTokens < 0) startTokens = state.GetPivotTokens(Player.P0);
                     Assert.That(state.Turn, Is.EqualTo(Player.P0));
                     Assert.That(pc.Pick(0), Is.True, "pick");
                     Assert.That(pc.IsHolding, Is.True);
@@ -291,7 +294,11 @@ namespace Edgewise.Tests.PlayMode
             Assert.That(placed, Is.GreaterThanOrEqualTo(4));
             Assert.That(rotated, Is.True, "the Pivot rotation was used");
             Assert.That(_app.LastOutcome.Moves, Is.EqualTo(9));
-            Assert.That(_app.Match.State.GetPivotTokens(Player.P0), Is.EqualTo(1), "one token was spent");
+            Assert.That(_app.Match.State.GetPivotTokens(Player.P0), Is.EqualTo(startTokens - 1), "one token was spent");
+            // ゲーム本体の既定値（先攻・後攻で非対称）で配られている
+            var first = _app.Match.State.FirstPlayer;
+            var dealt = GameConstants.MatchPivotTokens(_app.Match.State.Rules);
+            Assert.That(startTokens, Is.EqualTo(first == Player.P0 ? dealt.First : dealt.Second));
         }
     }
 }

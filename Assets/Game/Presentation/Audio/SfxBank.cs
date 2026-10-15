@@ -7,7 +7,7 @@ namespace Edgewise.Game.Audio
 {
     /// <summary>
     /// 効果音を起動時に AudioClip.Create で合成し、鳴らす（表示側の「音」だけを担当。DESIGN §8-1 SfxBank）。
-    /// - 音量 = 設定の音量（UserPrefs.SfxVolume）× 種類ごとの音量（JuiceSettings）。ミュート中は鳴らさない。
+    /// - 音量 = 全体の音量 × 効果音の音量（UserPrefs）× 種類ごとの音量（JuiceSettings）。全体ミュート中は鳴らさない。
     /// - WebGL のブラウザは最初のユーザー操作（クリック・タップ・キー）まで音を出せない。それより前の音は貯めずに捨てる
     ///   （操作した瞬間に溜まった音がまとめて鳴るのを防ぐ）。Unity は最初の操作で AudioContext を再開する。
     /// - uGUI のボタンを押したときの音もここで付ける。
@@ -31,9 +31,14 @@ namespace Edgewise.Game.Audio
         public SfxKind LastKind { get; private set; }
         public float LastSemitones { get; private set; }
 
+        /// <summary>最後に鳴らした（鳴らそうとした）音の実際の音量（テスト用。ミュート中は 0）。</summary>
+        public float LastVolume { get; private set; }
+
         public bool Unlocked => _unlocked;
 
         public void Wire(JuiceSettings j) => juice = j;
+
+        public JuiceSettings Juice => juice;
 
         void Awake()
         {
@@ -112,9 +117,10 @@ namespace Edgewise.Game.Audio
             LastKind = kind;
             LastSemitones = semitones;
             PlayedCount++;
-            if (!_unlocked || UserPrefs.Mute) return;
-            float vol = UserPrefs.SfxVolume * KindVolume(juice, kind);
-            if (vol <= 0.001f) return;
+            // 全体 × 効果音（設定）× 種類ごと（JuiceSettings）。全体ミュート中は 0
+            float vol = UserPrefs.EffectiveSfxVolume * KindVolume(juice, kind);
+            LastVolume = vol;
+            if (!_unlocked || vol <= 0.001f) return;
             var s = _sources[_next];
             _next = (_next + 1) % _sources.Length;
             s.Stop();

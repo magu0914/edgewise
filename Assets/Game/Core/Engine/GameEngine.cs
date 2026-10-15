@@ -83,7 +83,11 @@ namespace Edgewise.Core
                 foreach (var id in hand)
                     cards[id] = allCards[id];
 
-            int tokens = rules.Pivot ? GameConstants.PivotTokens : 0;
+            // トークンは先攻・後攻で別々に配る（Phase 3c）。既定 2/2 なら TS 版と同じ
+            int first = rules.Pivot ? config.PivotTokensFirst : 0;
+            int second = rules.Pivot ? config.PivotTokensSecond : 0;
+            int tokens0 = firstPlayer == Player.P0 ? first : second;
+            int tokens1 = firstPlayer == Player.P1 ? first : second;
             return new GameState(
                 rules,
                 new ReadOnlyDictionary<string, CardDef>(cards),
@@ -93,8 +97,8 @@ namespace Edgewise.Core
                 hands[1],
                 firstPlayer,
                 firstPlayer,
-                tokens,
-                tokens,
+                tokens0,
+                tokens1,
                 rng,
                 Phase.Playing,
                 0);

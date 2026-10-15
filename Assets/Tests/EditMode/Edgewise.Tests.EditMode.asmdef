@@ -5,7 +5,8 @@
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner",
         "Edgewise.Core",
-        "Edgewise.Game"
+        "Edgewise.Game",
+        "Edgewise.Editor"
     ],
     "includePlatforms": [
         "Editor"

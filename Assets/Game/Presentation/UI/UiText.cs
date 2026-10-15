@@ -45,7 +45,12 @@ namespace Edgewise.Game.UI
         public const string RuleSuddenDeath = "Sudden Death";
         public const string RuleSuddenDeathDesc = "引き分けなら持ちカードで再戦（5 回まで）";
         public const string RulePivot = "Pivot";
-        public const string RulePivotDesc = "2 回だけ、カードを 90° 単位で回して置ける";
+        // トークン数は GameConstants.MatchPivotTokens（先攻 1・後攻 2、Sudden Death ON は 1・1）。変えたらここも直す（テストで照合）
+        public const string RulePivotDesc = "カードを 90° 回して置ける（先攻 1 回・後攻 2 回）";
+        public const string RulePivotDescSuddenDeath = "カードを 90° 回して置ける（Sudden Death ON は 1 回ずつ）";
+
+        /// <summary>Pivot の説明（Sudden Death の ON/OFF でトークン数が変わる）。</summary>
+        public static string PivotDesc(bool suddenDeath) => suddenDeath ? RulePivotDescSuddenDeath : RulePivotDesc;
 
         public const string You = "あなた";
         public const string Cpu = "CPU";
@@ -64,12 +69,16 @@ namespace Edgewise.Game.UI
         public const string MenuSettings = "設定";
         public const string SettingsTitle = "設定";
         public const string SettingsSpeed = "演出の速度";
-        public const string SettingsVolume = "効果音の音量";
-        public const string SettingsMute = "効果音";
+        public const string SettingsMaster = "全体の音量";
+        public const string SettingsBgm = "BGM";
+        public const string SettingsSfx = "効果音";
+        public const string SettingsMuteAll = "ミュート";
+        public const string SettingsMuteAllNote = "ON ですべての音を止める";
+        public const string SettingsBackgroundMute = "裏では消音";
+        public const string SettingsBackgroundMuteNote = "タブが裏に回ったら音を止める";
         public const string SettingsShake = "画面の揺れ";
         public const string SettingsShakeNote = "動きを減らしたいときは OFF";
-        public const string Minus = "－";
-        public const string Plus = "＋";
+        public const string Percent = "%";
         public const string PivotTokens = "回転";
         public const string RotateLeft = "◀ 回転";
         public const string RotateRight = "回転 ▶";

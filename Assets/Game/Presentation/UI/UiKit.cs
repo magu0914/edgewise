@@ -106,6 +106,72 @@ namespace Edgewise.Game.UI
             text.textWrappingMode = TextWrappingModes.NoWrap;
             return b;
         }
+
+        /// <summary>
+        /// 横向きの uGUI Slider（背景・塗り・つまみ）。steps 段の整数値（wholeNumbers）にする。
+        /// 例: steps = 20 で 0..20（音量の 5% 刻み）。キーボードの ←→ でも 1 段ずつ動く。
+        /// </summary>
+        public static Slider Slider(Transform parent, string name, GameAssets a, int steps, Color fill)
+        {
+            var root = Rect(parent, name);
+            var slider = root.gameObject.AddComponent<Slider>();
+
+            var bg = Panel(root, "Background", a, new Color(0.06f, 0.07f, 0.14f, 1f));
+            var bgRt = (RectTransform)bg.transform;
+            bgRt.anchorMin = new Vector2(0f, 0.3f);
+            bgRt.anchorMax = new Vector2(1f, 0.7f);
+            bgRt.offsetMin = Vector2.zero;
+            bgRt.offsetMax = Vector2.zero;
+
+            var fillArea = Rect(root, "Fill Area");
+            fillArea.anchorMin = new Vector2(0f, 0.3f);
+            fillArea.anchorMax = new Vector2(1f, 0.7f);
+            fillArea.offsetMin = new Vector2(4f, 3f);
+            fillArea.offsetMax = new Vector2(-4f, -3f);
+            var fillImg = Panel(fillArea, "Fill", a, fill, false);
+            var fillRt = (RectTransform)fillImg.transform;
+            fillRt.anchorMin = Vector2.zero;
+            fillRt.anchorMax = new Vector2(0f, 1f);
+            fillRt.offsetMin = Vector2.zero;
+            fillRt.offsetMax = Vector2.zero;
+
+            // つまみは指で押しやすいように太め（幅は ApplyLayout 側で SetHandleWidth で変える）
+            var handleArea = Rect(root, "Handle Slide Area");
+            Stretch(handleArea);
+            handleArea.offsetMin = new Vector2(16f, 0f);
+            handleArea.offsetMax = new Vector2(-16f, 0f);
+            var handle = Panel(handleArea, "Handle", a, new Color(0.96f, 0.86f, 0.55f));
+            var handleRt = (RectTransform)handle.transform;
+            handleRt.anchorMin = new Vector2(0f, 0f);
+            handleRt.anchorMax = new Vector2(0f, 1f);
+            handleRt.sizeDelta = new Vector2(32f, 0f);
+
+            slider.fillRect = fillRt;
+            slider.handleRect = handleRt;
+            slider.targetGraphic = handle;
+            slider.direction = UnityEngine.UI.Slider.Direction.LeftToRight;
+            slider.minValue = 0;
+            slider.maxValue = steps;
+            slider.wholeNumbers = true;
+            var colors = slider.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(1.2f, 1.2f, 1.2f, 1f);
+            colors.selectedColor = new Color(1.25f, 1.2f, 1.0f, 1f);
+            colors.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
+            colors.colorMultiplier = 1.3f;
+            colors.fadeDuration = 0.06f;
+            slider.colors = colors;
+            return slider;
+        }
+
+        /// <summary>Slider のつまみの幅とつまみが動く範囲の端の余白を合わせる。</summary>
+        public static void SetHandleWidth(Slider s, float width)
+        {
+            var area = (RectTransform)s.handleRect.parent;
+            area.offsetMin = new Vector2(width * 0.5f, 0f);
+            area.offsetMax = new Vector2(-width * 0.5f, 0f);
+            s.handleRect.sizeDelta = new Vector2(width, 0f);
+        }
     }
 
     /// <summary>画面の向きが変わったときに配置をやり直す UI。</summary>

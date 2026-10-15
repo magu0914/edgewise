@@ -258,6 +258,8 @@ namespace Edgewise.Game.UI
                 ruleNames[i].color = enabled ? Theme.Ink : Theme.InkDim * 0.8f;
                 ruleDescs[i].alpha = enabled ? 1f : 0.5f;
             }
+            // Pivot のトークン数は Sudden Death の ON/OFF で変わる（先攻 1・後攻 2 / 1・1）
+            ruleDescs[RuleCount - 1].text = UiText.PivotDesc(_settings.suddenDeath);
         }
 
         static void Mark(Button b, bool on)

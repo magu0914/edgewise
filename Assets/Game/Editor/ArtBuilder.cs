@@ -1,4 +1,5 @@
 using System.IO;
+using Edgewise.Game.Audio;
 using Edgewise.Game.Juice;
 using Edgewise.Game.View;
 using TMPro;
@@ -24,6 +25,7 @@ namespace Edgewise.EditorTools
 
         public const string RoundRectPath = GeneratedDir + "/RoundRect.png";
         public const string JuicePath = SettingsDir + "/JuiceSettings.asset";
+        public const string BgmLibraryPath = SettingsDir + "/BgmLibrary.asset";
         public const string VolumePath = SettingsDir + "/PostProcess.asset";
         public const string GameAssetsPath = SettingsDir + "/GameAssets.asset";
         public const string CardPrefabPath = PrefabsDir + "/Card.prefab";
@@ -50,6 +52,7 @@ namespace Edgewise.EditorTools
             assets.fontOutline = fontOutline;
             assets.roundRect = EnsureRoundRect();
             assets.juice = EnsureJuice();
+            assets.bgm = EnsureBgmLibrary();
             assets.quad = Resources.GetBuiltinResource<Mesh>("Quad.fbx");
             EditorUtility.SetDirty(assets);
             AssetDatabase.SaveAssets();
@@ -136,6 +139,19 @@ namespace Edgewise.EditorTools
             AssetDatabase.CreateAsset(j, JuicePath);
             Debug.Log("[Edgewise] Created " + JuicePath);
             return j;
+        }
+
+        /// <summary>BGM の割り当て（無ければ空で作る。割り当て済みの曲は上書きしない）。曲は Assets/Audio/Bgm/ に置く（docs/AUDIO.md）。</summary>
+        static BgmLibrary EnsureBgmLibrary()
+        {
+            Folder("Assets", "Audio");
+            Folder("Assets/Audio", "Bgm");
+            var lib = AssetDatabase.LoadAssetAtPath<BgmLibrary>(BgmLibraryPath);
+            if (lib != null) return lib;
+            lib = ScriptableObject.CreateInstance<BgmLibrary>();
+            AssetDatabase.CreateAsset(lib, BgmLibraryPath);
+            Debug.Log("[Edgewise] Created " + BgmLibraryPath);
+            return lib;
         }
 
         /// <summary>Bloom（光の演出を引き立てる）と弱いビネット。WebGL で重ければ強さを下げる。</summary>

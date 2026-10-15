@@ -63,6 +63,50 @@ namespace Edgewise.Sim
             }
             sb.AppendLine();
 
+            sb.AppendLine("### 先攻勝率（配牌ごとに 1 局だけ数えた独立な標本。ノイズのない CPU 同士は席交代の 2 局が鏡写しになるので、合否はこの区間で判断する）");
+            sb.AppendLine();
+            sb.AppendLine("| Rules | A vs B | Deals | First wins | Second wins | Draws | First-player win rate (excl. draws) | Draw rate |");
+            sb.AppendLine("|---|---|---:|---:|---:|---:|---:|---:|");
+            foreach (var r in results)
+            {
+                var s = r.Stats;
+                int decisive1 = s.FirstWins1 + s.SecondWins1;
+                int games1 = decisive1 + s.Draws1;
+                sb.Append("| ").Append(r.Preset.Name)
+                    .Append(" | ").Append(r.A.Label).Append(" vs ").Append(r.B.Label)
+                    .Append(" | ").Append(games1)
+                    .Append(" | ").Append(s.FirstWins1)
+                    .Append(" | ").Append(s.SecondWins1)
+                    .Append(" | ").Append(s.Draws1)
+                    .Append(" | ").Append(PctCi(s.FirstWins1, decisive1))
+                    .Append(" | ").Append(PctCi(s.Draws1, games1))
+                    .AppendLine(" |");
+            }
+            sb.AppendLine();
+
+            bool anySd = false;
+            foreach (var r in results)
+                if (r.Preset.Rules.SuddenDeath) anySd = true;
+            if (anySd)
+            {
+                sb.AppendLine("### 決着したラウンド別の先攻勝率（本戦の先攻から見る。再戦では先攻が入れ替わり、Pivot トークンは持ち越す）");
+                sb.AppendLine();
+                sb.AppendLine("| Rules | A vs B | Decided in round 1: first-player win rate | Decided in a rematch: first-player win rate |");
+                sb.AppendLine("|---|---|---:|---:|");
+                foreach (var r in results)
+                {
+                    if (!r.Preset.Rules.SuddenDeath) continue;
+                    var s = r.Stats;
+                    int f0 = s.FirstWins - s.FirstWinsRematch, s0 = s.SecondWins - s.SecondWinsRematch;
+                    sb.Append("| ").Append(r.Preset.Name).Append(" | ").Append(r.A.Label).Append(" vs ").Append(r.B.Label)
+                        .Append(" | ").Append(PctCi(f0, f0 + s0)).Append(" (n=").Append(f0 + s0).Append(')')
+                        .Append(" | ").Append(PctCi(s.FirstWinsRematch, s.FirstWinsRematch + s.SecondWinsRematch))
+                        .Append(" (n=").Append(s.FirstWinsRematch + s.SecondWinsRematch).Append(')')
+                        .AppendLine(" |");
+                }
+                sb.AppendLine();
+            }
+
             sb.AppendLine("### 盤上の出来事（1 局あたり）と思考コスト（dotnet）");
             sb.AppendLine();
             sb.AppendLine("| Rules | A vs B | Flips basic / same / plus / combo | Max chain (max / avg) | Sudden Death rounds | Nodes/move A / B (max) | ms/move A / B (max) | Wall s |");
@@ -114,6 +158,24 @@ namespace Edgewise.Sim
                         }
                         sb.Append(' ').Append(F(used / (double)Math.Max(1, s.Games), "0.00")).AppendLine(" |");
                     }
+                }
+                sb.AppendLine();
+
+                sb.AppendLine("### Pivot の使用（役割別。先攻 = 本戦の先攻。Sudden Death の再戦を含む 1 局全体）");
+                sb.AppendLine();
+                sb.AppendLine("| Rules | A vs B | Tokens first / second | First: games with ≥1 pivot | Second: games with ≥1 pivot | Pivots / game first / second |");
+                sb.AppendLine("|---|---|---:|---:|---:|---:|");
+                foreach (var r in results)
+                {
+                    if (!r.Preset.Rules.Pivot) continue;
+                    var s = r.Stats;
+                    double g = Math.Max(1, s.Games);
+                    sb.Append("| ").Append(r.Preset.Name).Append(" | ").Append(r.A.Label).Append(" vs ").Append(r.B.Label)
+                        .Append(" | ").Append(r.Preset.PivotFirst).Append(" / ").Append(r.Preset.PivotSecond)
+                        .Append(" | ").Append(Pct(s.GamesRotatedByRole[0], s.Games))
+                        .Append(" | ").Append(Pct(s.GamesRotatedByRole[1], s.Games))
+                        .Append(" | ").Append(F(s.PivotByRole[0] / g, "0.00")).Append(" / ").Append(F(s.PivotByRole[1] / g, "0.00"))
+                        .AppendLine(" |");
                 }
                 sb.AppendLine();
             }
