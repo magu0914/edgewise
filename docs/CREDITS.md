@@ -64,6 +64,8 @@ Icons made by Lorc, Delapouite, Caro Asercion, Skoll and Cathelineau, available 
 | Sextantor | megabot | Lorc | CC BY 3.0 |
 | Ursamaw | polar-bear | Cathelineau | CC BY 3.0 |
 
+ゲーム内でも、タイトルの「クレジット」画面にこの表（カード → アイコン → 作者 → ライセンス）を、カード図鑑の拡大表示に 1 行のクレジットを出しています。
+
 作者のサイト: Lorc（http://lorcblog.blogspot.com）、Delapouite（http://delapouite.com）、Caro Asercion、Skoll、Cathelineau（いずれも game-icons.net の license.txt の表記）。
 
 ## BGM（OpenTracks、旧 DOVA-SYNDROME）

@@ -35,6 +35,9 @@ namespace Edgewise.Game.App
         [SerializeField] FpsMeter fps;
         [SerializeField] SettingsPanel settings;
         [SerializeField] BgmPlayer bgm;
+        [SerializeField] CardDex dex;
+        [SerializeField] CreditsScreen credits;
+        [SerializeField] TitleFan fan;
 
         MatchSettings _settings;
         MatchSettings _last;
@@ -51,15 +54,21 @@ namespace Edgewise.Game.App
         public FpsMeter Fps => fps;
         public SettingsPanel Settings => settings;
         public BgmPlayer Bgm => bgm;
+        public CardDex Dex => dex;
+        public CreditsScreen Credits => credits;
+        public TitleFan Fan => fan;
         public MatchOutcome LastOutcome { get; private set; }
 
         /// <summary>結果画面のボタンが押せる状態になったか（テスト用）。</summary>
         public bool ResultReady { get; private set; }
 
         public void Wire(GameAssets a, GameObject tableRoot, TitleScreen t, SetupScreen s, HudView h, MenuPanel m, ResultScreen r, BannerView b,
-            MatchController mc, FpsMeter f, SettingsPanel sp, BgmPlayer music)
+            MatchController mc, FpsMeter f, SettingsPanel sp, BgmPlayer music, CardDex cardDex, CreditsScreen creditsScreen, TitleFan titleFan)
         {
             settings = sp;
+            dex = cardDex;
+            credits = creditsScreen;
+            fan = titleFan;
             bgm = music;
             assets = a;
             table = tableRoot;
@@ -79,6 +88,10 @@ namespace Edgewise.Game.App
             _settings = MatchSettings.Load();
             title.StartPressed += ShowSetup;
             title.SettingsPressed += OpenSettingsFromTitle;
+            title.DexPressed += ShowDex;
+            title.CreditsPressed += ShowCredits;
+            dex.Closed += () => ShowTitle(title.DexButton);
+            credits.Closed += () => ShowTitle(title.CreditsButton);
             setup.BeginPressed += s => StartMatch(s);
             setup.BackPressed += ShowTitle;
             result.AgainPressed += () => StartMatch(_last ?? _settings);
@@ -185,16 +198,23 @@ namespace Edgewise.Game.App
             result.Hide();
             menu.gameObject.SetActive(false);
             settings.gameObject.SetActive(false);
+            dex.Hide();
+            credits.gameObject.SetActive(false);
+            fan.Hide();
             banner.Hide();
             hud.SetVisible(false);
             hud.ShowRotateButtons(false);
         }
 
-        public void ShowTitle()
+        public void ShowTitle() => ShowTitle(null);
+
+        void ShowTitle(UnityEngine.UI.Selectable focus)
         {
             HideAll();
             table.SetActive(false);
             title.Show();
+            fan.Show();
+            if (focus != null) EventSystem.current?.SetSelectedGameObject(focus.gameObject);
             PlayBgm(BgmCue.Title);
             AutomationLog.Buttons("Title", title.transform);
         }
@@ -284,6 +304,25 @@ namespace Edgewise.Game.App
             bool has = bgm.Play(cue);
             if (changed && AutomationLog.Enabled) AutomationLog.Write("bgm " + cue + (has ? "" : " silent"));
             return has;
+        }
+
+        /// <summary>カード図鑑を開く（タイトルから）。</summary>
+        public void ShowDex()
+        {
+            HideAll();
+            table.SetActive(false);
+            dex.Open();
+            PlayBgm(BgmCue.Title);
+        }
+
+        /// <summary>クレジット画面を開く（タイトルから）。扇のカードは後ろで回り続ける。</summary>
+        public void ShowCredits()
+        {
+            HideAll();
+            table.SetActive(false);
+            fan.Show();
+            credits.Open();
+            PlayBgm(BgmCue.Title);
         }
 
         void OpenSettingsFromTitle()

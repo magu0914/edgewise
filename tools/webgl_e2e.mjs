@@ -523,6 +523,153 @@ async function run4a() {
   log('checks', JSON.stringify(checks));
 }
 
+// ---------------------------------------------------------------------------
+// Phase 4b: タイトルの扇・カード図鑑（一覧・拡大・傾き・キーボード・縦画面）・クレジット・対戦中の手札ホバー・1 局。
+//   node tools/webgl_e2e.mjs --scenario 4b --url http://127.0.0.1:8771/ --out Logs/shots/4b
+// ---------------------------------------------------------------------------
+function dexCards(from) {
+  const cards = {};
+  for (let i = from; i < consoleLines.length; i++) {
+    const m = consoleLines[i].line.match(/^dex card (\d+) (-?\d+) (-?\d+) (\S+)/);
+    if (m) cards[m[4]] = { i: +m[1], x: +m[2], y: +m[3] };
+  }
+  return cards;
+}
+
+async function zoomCard(id, listAt, name, tilt) {
+  const cards = dexCards(listAt);
+  const c = cards[id];
+  if (!c) throw new Error('dex card not on screen: ' + id);
+  const before = consoleLines.length;
+  await click(c.x, c.y);
+  const z = await waitLine(new RegExp('^dex zoom ' + id + ' lv(\\d+) (-?\\d+) (-?\\d+) (-?\\d+) (-?\\d+)'), 5000, before);
+  const cx = +z.m[2], cy = +z.m[3], hw = +z.m[4], hh = +z.m[5];
+  if (tilt) {
+    // カードの右上の縁へカーソルを動かして傾ける
+    for (let k = 1; k <= 8; k++) { await move(cx + hw * 0.9 * k / 8, cy - hh * 0.75 * k / 8); await sleep(30); }
+  } else {
+    await move(cx, cy);
+  }
+  await sleep(900);
+  await shot(name);
+  return { cx, cy, hw, hh };
+}
+
+async function run4b() {
+  const checks = {};
+  const url = `${BASE}?log&seed=${SEED}&slow=1`;
+  log('open', url);
+  await send('Page.navigate', { url });
+  const tAt = (await waitLine(/^screen Title/, 120000)).index;
+  await sleep(3000);
+  await shot('01_title_fan');
+
+  // ---- カード図鑑（横） ----
+  await click(...Object.values(uiRect('Title', 'DexButton', tAt)));
+  const dAt = (await waitLine(/^dex list landscape/, 10000, tAt)).index;
+  await move(5, 5);
+  await sleep(4000); // 一覧の FPS を測る（50 枚）
+  await shot('02_dex_list_landscape');
+  // 1 枚にカーソルを乗せる（傾いて名前が出る）
+  {
+    const c = dexCards(lastIndex(/^screen Dex \d/))['orionmane'];
+    for (let k = 0; k <= 6; k++) { await move(c.x - 20 + k * 6, c.y - 20 + k * 4); await sleep(30); }
+    await sleep(600);
+    await shot('02b_dex_list_hover');
+  }
+  // 拡大: Lv1・Lv5・Lv8（傾き）・Lv10（傾き）
+  const zooms = [['glimmouse', '03_dex_zoom_lv1', false], ['lupusfang', '04_dex_zoom_lv5', false], ['cygnwraith', '05_dex_zoom_lv8_tilt', true], ['pegasion', '06_dex_zoom_lv10_tilt', true]];
+  for (const [id, name, tilt] of zooms) {
+    const listAt = lastIndex(/^screen Dex \d/);
+    await zoomCard(id, listAt, name, tilt);
+    const back = consoleLines.length;
+    await key('Escape');
+    await waitLine(/^dex list/, 5000, back);
+    await sleep(300);
+  }
+  checks.fpsDex = consoleLines.map((l) => l.line).filter((l) => /^fps-dex/.test(l));
+
+  // キーボード: → → Enter で 2 枚目（Dustwisp）を拡大、→ で次、Esc で一覧
+  {
+    const kAt = consoleLines.length;
+    await move(5, 5);
+    await key('ArrowRight');
+    await key('ArrowRight');
+    await key('Enter');
+    const z = await waitLine(/^dex zoom (\S+)/, 5000, kAt);
+    await key('ArrowRight');
+    const z2 = await waitLine(/^dex zoom (\S+)/, 5000, z.index + 1);
+    checks.keyboard = [z.m[1], z2.m[1]];
+    await key('Escape');
+    await waitLine(/^dex list/, 5000, z2.index);
+  }
+
+  // ---- カード図鑑（縦 360x640） ----
+  await send('Emulation.setDeviceMetricsOverride', { width: 360, height: 640, deviceScaleFactor: 1, mobile: false });
+  const pAt = (await waitLine(/^dex list portrait/, 10000)).index;
+  await sleep(900);
+  await shot('07_dex_list_portrait_360x640');
+  {
+    const c = dexCards(lastIndex(/^screen Dex \d/))['emberkit'];
+    await click(c.x, c.y);
+    await waitLine(/^dex zoom emberkit/, 5000, pAt);
+    await sleep(900);
+    await shot('08_dex_zoom_portrait_360x640');
+    const b = consoleLines.length;
+    await key('Escape');
+    await waitLine(/^dex list/, 5000, b);
+  }
+  await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
+  const lAt = (await waitLine(/^dex list landscape/, 10000, pAt)).index;
+  await sleep(400);
+  // 戻る → タイトル
+  await click(...Object.values(uiRect('Dex', 'DexBackButton', lastIndex(/^screen Dex \d/))));
+  const t2 = (await waitLine(/^screen Title/, 5000, lAt)).index;
+  await sleep(500);
+
+  // ---- クレジット ----
+  await click(...Object.values(uiRect('Title', 'CreditsButton', t2)));
+  const cAt = (await waitLine(/^screen Credits/, 5000, t2)).index;
+  await sleep(700);
+  await shot('09_credits');
+  await click(...Object.values(uiRect('Credits', 'CreditsCloseButton', cAt)));
+  const t3 = (await waitLine(/^screen Title/, 5000, cAt)).index;
+  await sleep(500);
+
+  // ---- 対戦（手札にカーソルを乗せる） ----
+  await click(...Object.values(uiRect('Title', 'StartButton', t3)));
+  const setupAt = (await waitLine(/^screen Setup/, 10000, t3)).index;
+  await sleep(500);
+  await click(...Object.values(uiRect('Setup', 'BeginButton', setupAt)));
+  await waitLine(/^match seed=/, 20000, setupAt);
+  let hovered = false;
+  const r = await playMatch({
+    onTurn: async (moves, turn) => {
+      if (!hovered && moves >= 1) {
+        // 2 枚目（重なっている札）にカーソルを乗せる: 前に出て全体が見える
+        const h = turn.hand[1] ?? turn.hand[0];
+        for (let k = 0; k <= 6; k++) { await move(h.x - 15 + k * 5, h.y + 10 + k * 3); await sleep(30); }
+        await sleep(700);
+        await shot('10_match_hand_hover');
+        hovered = true;
+      }
+    },
+  });
+  log('match finished', r.moves, 'moves');
+  await waitLine(/^screen Result/, 60000);
+  await sleep(600);
+  await shot('11_result');
+  checks.fpsMatch = consoleLines.map((l) => l.line).filter((l) => /^fps-match/.test(l));
+  results.fps = consoleLines.filter((l) => /^fps/.test(l.line)).map((l) => l.line);
+  results.checks = checks;
+  log('checks', JSON.stringify(checks));
+}
+
+function lastIndex(re) {
+  for (let i = consoleLines.length - 1; i >= 0; i--) if (re.test(consoleLines[i].line)) return i;
+  return 0;
+}
+
 let exitCode = 0;
 try {
   await connect();
@@ -531,6 +678,10 @@ try {
   await send('Runtime.enable');
   await send('Page.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
+  if (args.scenario === '4b') {
+    await run4b();
+    throw { done: true };
+  }
   if (args.scenario === '4a') {
     await run4a();
     throw { done: true };

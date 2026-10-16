@@ -113,8 +113,57 @@ namespace Edgewise.Game.UI
         public const string Again = "もう一度";
         public const string ChangeSettings = "設定を変える";
 
+        // ---- タイトルのボタン（4b） ----
+        public const string TitleDex = "カード図鑑";
+        public const string TitleCredits = "クレジット";
+
+        // ---- カード図鑑（DESIGN §7-1 見せ場） ----
+        public const string DexTitle = "カード図鑑";
+        public const string DexCountPrefix = "全 ";
+        public const string DexCountSuffix = " 枚";
+        public const string DexHintList = "クリック・タップで拡大　矢印で選んで Enter　Esc で戻る";
+        public const string DexHintListTouch = "タップで拡大　上下にドラッグで移動";
+        public const string DexHintZoom = "カードはカーソルの方へ傾きます　← → で前後のカード　Esc で一覧へ";
+        public const string DexPrev = "◀ 前";
+        public const string DexNext = "次 ▶";
+        public const string DexBackToList = "一覧へ";
+        public const string DexElement = "属性";
+        public const string DexTribe = "系統";
+        public const string DexNone = "なし";
+        public const string DexIcon = "アイコン";
+        public const string DexLevel = "Lv";
+        public const string TribeBeastName = "獣";
+        public const string TribeMachineName = "機械";
+        public const string TribeSpiritName = "霊";
+        public const string TribeDragonName = "竜";
+        public const string ElementFireName = "火";
+        public const string ElementIceName = "氷";
+        public const string ElementThunderName = "雷";
+        public const string ElementEarthName = "土";
+        public const string ElementWaterName = "水";
+        public const string ElementWindName = "風";
+        public const string ElementHolyName = "聖";
+        public const string ElementDarkName = "闇";
+
+        // ---- クレジット画面（docs/CREDITS.md の要約） ----
+        public const string CreditsTitle = "クレジット";
+        public const string CreditsFontHeading = "フォント";
+        public const string CreditsFontBody = "Noto Sans JP（Copyright 2014-2021 Adobe）\nSIL Open Font License, Version 1.1";
+        public const string CreditsIconsHeading = "カード絵のアイコン";
+        public const string CreditsIconsBody = "カード絵の土台に game-icons.net のアイコンを使い、SDF に変換して色・光・星座を加えています（改変あり）。\n"
+            + "ライセンス: Creative Commons Attribution 3.0（CC BY 3.0）\n"
+            + "Icons made by Lorc, Delapouite, Caro Asercion, Skoll and Cathelineau, available on https://game-icons.net";
+        public const string CreditsCardHeader = "カード — アイコン（作者）";
+        public const string CreditsBgmHeading = "BGM（OpenTracks）";
+        public const string CreditsBgmBody = "タイトル「星空」Heitaro Ashibe\n対戦「ギザなビート」マニーラ\n勝利「明日へのファンファーレ」のる\n敗北「Too late...」t.tam\n"
+            + "https://opentracks.com/ のフリー素材を音源利用ライセンスに従って使用しています。素敵な楽曲をありがとうございます。";
+        public const string CreditsSfxHeading = "効果音";
+        public const string CreditsSfxBody = "効果音はすべてプログラムで合成した音です。";
+        public const string CreditsHomageHeading = "オマージュの表記";
+        public const string CreditsHomageBody = "本作は Triple Triad（© SQUARE ENIX）へのオマージュ作品であり、公式とは無関係です。ルールの仕組みのみを参考にし、カード名・キャラクター・絵・音・ロゴ・名称は使っていません。";
+
         /// <summary>フォントに必ず入れる追加の記号。</summary>
         public const string ExtraGlyphs = "◆●◇○×★☆・…「」（）〜ー－−＋！？：　0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-            + "火氷雷土水風聖闇獣機霊竜";
+            + "火氷雷土水風聖闇獣機霊竜—▶◀";
     }
 }

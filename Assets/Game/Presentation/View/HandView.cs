@@ -28,6 +28,9 @@ namespace Edgewise.Game.View
         public Vector3 HoverDirection = Vector3.right;
 
         public float HoverRaise = 0.16f;
+
+        /// <summary>カーソルを乗せた（キーボードで選んだ）カードの拡大率。重なりから前に出て絵の全体が見えるように。</summary>
+        public float HoverScale = 1.12f;
         public float MoveTime = 0.15f;
 
         /// <summary>持ち上げられている（PlayerController が動かしている）カード。並べ直しの対象外。</summary>
@@ -50,6 +53,10 @@ namespace Edgewise.Game.View
 
         int BaseOrder(int index) => 20 + index;
 
+        /// <summary>前に出したカードの位置: 盤の方向へ浮かせ、縦の列では拡大しても隣に隠れないよう少しずらす。</summary>
+        Vector3 RaisedPosition(int index, bool raised) =>
+            SlotPosition(index) + (raised ? HoverDirection * HoverRaise + new Vector3(0, 0, -0.08f) : Vector3.zero);
+
         /// <summary>手札を並べ直す。animate = false なら即座に。</summary>
         public void Layout(bool animate, float timeFactor = 1f)
         {
@@ -58,12 +65,14 @@ namespace Edgewise.Game.View
                 var card = Cards[i];
                 if (card == null || card == Held) continue;
                 bool raised = i == _hover || i == _keySelect;
-                var target = SlotPosition(i) + (raised ? HoverDirection * HoverRaise + new Vector3(0, 0, -0.08f) : Vector3.zero);
-                card.BaseScale = CardScale;
+                var target = RaisedPosition(i, raised);
+                float scale = raised ? CardScale * HoverScale : CardScale;
+                card.BaseScale = scale;
+                if (!raised) card.SetTiltTarget(Vector2.zero);
                 card.SetOrder(raised ? 45 : BaseOrder(i));
                 card.SetSelect(i == _keySelect ? 1f : 0f);
                 card.SetLift(raised ? 0.25f : 0f);
-                MoveCard(card, target, Quaternion.identity, CardScale, animate ? MoveTime * timeFactor : 0f);
+                MoveCard(card, target, Quaternion.identity, scale, animate ? MoveTime * timeFactor : 0f);
             }
         }
 
@@ -85,6 +94,7 @@ namespace Edgewise.Game.View
         public int HitTest(Vector3 world)
         {
             var size = CardView.Size * CardScale;
+            var raisedSize = size * HoverScale;
             int best = -1;
             int bestOrder = int.MinValue;
             for (int i = 0; i < Cards.Count; i++)
@@ -92,7 +102,8 @@ namespace Edgewise.Game.View
                 if (Cards[i] == null || Cards[i] == Held) continue;
                 bool raised = i == _hover || i == _keySelect;
                 var c = SlotPosition(i) + (raised ? HoverDirection * HoverRaise : Vector3.zero);
-                if (Mathf.Abs(world.x - c.x) > size.x * 0.5f || Mathf.Abs(world.y - c.y) > size.y * 0.5f) continue;
+                var sz = raised ? raisedSize : size;
+                if (Mathf.Abs(world.x - c.x) > sz.x * 0.5f || Mathf.Abs(world.y - c.y) > sz.y * 0.5f) continue;
                 int order = raised ? 45 : BaseOrder(i);
                 if (order > bestOrder)
                 {

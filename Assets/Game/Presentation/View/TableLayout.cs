@@ -74,7 +74,8 @@ namespace Edgewise.Game.View
                 board.transform.position = new Vector3(0f, boardY, 0f);
                 float handX = Mathf.Clamp(halfW - 0.62f, 2.38f, 3.3f);
                 float avail = top - bottom;
-                float step = Mathf.Min(0.74f, (avail - CardView.Size.y) / 4f);
+                // 重なりを少し減らす（4b）。前に出したカードは HandView.HoverScale で拡大して全体を見せる
+                float step = Mathf.Min(0.86f, (avail - CardView.Size.y) / 4f);
                 ConfigureHand(hand0, new Vector3(-handX, boardY, 0f), true, step, 1f, Vector3.right);
                 ConfigureHand(hand1, new Vector3(handX, boardY, 0f), true, step, 1f, Vector3.left);
             }

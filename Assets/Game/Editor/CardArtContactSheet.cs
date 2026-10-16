@@ -15,11 +15,11 @@ namespace Edgewise.EditorTools
     /// 50 枚のカードを実際のプレハブとシェーダーで描いて 1 枚の画像に並べる（コンタクトシート。DESIGN §7-1 の監査用）。
     /// 各カードの下にカード名とアイコン名（作者）を入れる。GPU が要るので -nographics を付けずに batchmode で実行する:
     ///   tools/RunUnity.ps1 -Graphics -LogName sheet.log -Extra '-executeMethod','Edgewise.EditorTools.CardArtContactSheet.Render'
-    /// 出力: Logs/shots/4a/contact_sheet.png（1 枚 192px 幅、10 列 × 5 行）。
+    /// 出力: Logs/shots/4b/contact_sheet.png（1 枚 192px 幅、10 列 × 5 行）。
     /// </summary>
     public static class CardArtContactSheet
     {
-        public const string OutPath = "Logs/shots/4a/contact_sheet.png";
+        public const string OutPath = "Logs/shots/4b/contact_sheet.png";
         const int Columns = 10;
         const float PixelsPerUnit = 192f;
         const float CellW = 1.34f;

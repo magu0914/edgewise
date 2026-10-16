@@ -25,6 +25,12 @@ namespace Edgewise.Game.View
         /// <summary>カード絵（SDF アトラスと星座）。Build で GameAssets から受け取る。</summary>
         [SerializeField] CardArtAtlas art;
 
+        /// <summary>見た目（本体のクアッドと文字）をまとめた子。傾き（§7-1 の層 5）はこれだけを回す（裏返しなどの演出は親を回す）。</summary>
+        [SerializeField] Transform visual;
+
+        /// <summary>傾きの最大角（度）。</summary>
+        public const float MaxTiltDegrees = 12f;
+
         static readonly int OwnerColorId = Shader.PropertyToID("_OwnerColor");
         static readonly int ElemColorId = Shader.PropertyToID("_ElemColor");
         static readonly int GlowColorId = Shader.PropertyToID("_GlowColor");
@@ -56,8 +62,9 @@ namespace Edgewise.Game.View
 
         MaterialPropertyBlock _mpb;
         bool _dirty = true;
-        float _glow, _select, _alpha = 1f, _lift, _flash, _emblemRot, _levelFx;
+        float _glow, _select, _alpha = 1f, _lift, _flash, _emblemRot;
         Vector2 _tilt;
+        Vector2 _tiltTarget;
         Color _glowColor = Color.white;
         int _order;
 
@@ -87,8 +94,10 @@ namespace Edgewise.Game.View
         {
             for (int i = transform.childCount - 1; i >= 0; i--) DestroyImmediate(transform.GetChild(i).gameObject);
 
+            visual = new GameObject("Visual").transform;
+            visual.SetParent(transform, false);
             var bodyGo = new GameObject("Body");
-            bodyGo.transform.SetParent(transform, false);
+            bodyGo.transform.SetParent(visual, false);
             bodyGo.transform.localScale = new Vector3(QuadSize.x, QuadSize.y, 1f);
             bodyGo.AddComponent<MeshFilter>().sharedMesh = assets.quad;
             body = bodyGo.AddComponent<MeshRenderer>();
@@ -127,7 +136,7 @@ namespace Edgewise.Game.View
         TextMeshPro Text(string name, GameAssets assets, Vector2 pos, float size, Vector2 rect, Material mat)
         {
             var go = new GameObject(name);
-            go.transform.SetParent(transform, false);
+            go.transform.SetParent(visual, false);
             go.transform.localPosition = new Vector3(pos.x, pos.y, -0.001f);
             var t = go.AddComponent<TextMeshPro>();
             t.font = assets.font;
@@ -229,21 +238,46 @@ namespace Edgewise.Game.View
         }
 
         /// <summary>
-        /// 傾き（DESIGN §7-1 の 5。x = 右へ、y = 上へ、各 -1..1）。シェーダーは層ごとにずらす（背景は少し、星は大きく）。
-        /// 4a では呼び出し元がなく常に 0（口だけ用意）。
+        /// 傾けたい向き（DESIGN §7-1 の 5。x = カーソルが右、y = カーソルが上、各 -1..1。ゼロで水平に戻る）。
+        /// カードはカーソルの方へ最大 <see cref="MaxTiltDegrees"/>° 傾き（カーソル側が奥へ沈む）、シェーダーは層ごとにずらして
+        /// 奥行きを出す（背景は少し、シルエット、星は大きく）。ホロの光沢も傾きに連動する。毎フレームなめらかに追いかける。
         /// </summary>
-        public void SetTilt(Vector2 tilt)
+        public void SetTiltTarget(Vector2 target)
         {
-            if (_tilt == tilt) return;
-            _tilt = tilt;
+            _tiltTarget = Vector2.ClampMagnitude(target, 1f);
+        }
+
+        /// <summary>傾きをすぐに 0 にする（盤に置いたカードなど、静止させたいとき）。</summary>
+        public void ResetTilt()
+        {
+            _tiltTarget = Vector2.zero;
+            if (_tilt == Vector2.zero) return;
+            _tilt = Vector2.zero;
+            if (visual != null) visual.localRotation = Quaternion.identity;
             _dirty = true;
         }
 
-        /// <summary>レベルごとの加工の強さ（DESIGN §7-1 の 4。4b で実装。4a では 0）。</summary>
-        public void SetLevelFx(float amount)
+        public Vector2 Tilt => _tilt;
+        public Vector2 TiltTarget => _tiltTarget;
+
+        /// <summary>傾きの見た目の回転（カーソル側が奥 = +z へ沈む向き）。</summary>
+        public static Quaternion TiltRotation(Vector2 tilt) => Quaternion.Euler(tilt.y * MaxTiltDegrees, -tilt.x * MaxTiltDegrees, 0f);
+
+        /// <summary>world の点に向けて傾ける（点がカードの縁にあるとき最大）。</summary>
+        public void TiltToward(Vector3 world)
         {
-            if (Mathf.Approximately(_levelFx, amount)) return;
-            _levelFx = amount;
+            var c = transform.position;
+            var half = Size * 0.5f * transform.lossyScale.x;
+            SetTiltTarget(new Vector2((world.x - c.x) / Mathf.Max(0.01f, half.x), (world.y - c.y) / Mathf.Max(0.01f, half.y)));
+        }
+
+        void UpdateTilt()
+        {
+            if (_tilt == _tiltTarget) return;
+            float k = 1f - Mathf.Exp(-Time.unscaledDeltaTime / 0.09f);
+            _tilt = Vector2.Lerp(_tilt, _tiltTarget, k);
+            if ((_tilt - _tiltTarget).sqrMagnitude < 1e-6f) _tilt = _tiltTarget;
+            if (visual != null) visual.localRotation = TiltRotation(_tilt);
             _dirty = true;
         }
 
@@ -310,7 +344,11 @@ namespace Edgewise.Game.View
             if (Def.Tribe.HasValue) tribeText.text = Theme.TribeGlyph(Def.Tribe.Value);
         }
 
-        void LateUpdate() => Apply();
+        void LateUpdate()
+        {
+            UpdateTilt();
+            Apply();
+        }
 
         void Apply()
         {
@@ -345,7 +383,7 @@ namespace Edgewise.Game.View
                     ? new Vector4(Mathf.Min(entry.stars.Length, CardArtAtlas.MaxStars), Mathf.Min(entry.lines.Length, CardArtAtlas.MaxLines), 1f, 0f)
                     : Vector4.zero);
                 _mpb.SetFloat(LevelId, Def.Level);
-                _mpb.SetFloat(LevelFxId, _levelFx);
+                _mpb.SetFloat(LevelFxId, (float)CardLevelFx.TierOf(Def.Level));
                 _mpb.SetVector(TiltId, new Vector4(_tilt.x, _tilt.y, 0f, 0f));
                 _mpb.SetFloat(EmblemRotId, _emblemRot);
                 _mpb.SetFloat(PivotId, Rotation);

@@ -134,6 +134,7 @@ namespace Edgewise.Game.Match
             card.SetGlow(0f, Color.white);
             card.SetAlpha(1f);
             card.SetOrder(60);
+            card.SetTiltTarget(Vector2.zero);
             hand.Layout(true, tf);
 
             var from = card.transform.position;
@@ -168,6 +169,7 @@ namespace Edgewise.Game.Match
             card.transform.SetPositionAndRotation(to, Quaternion.identity);
             card.BaseScale = 1f;
             card.SetLift(0f);
+            card.ResetTilt(); // 盤上のカードは傾けない（盤面が揺れて見えないように）
 
             _board.Placed[step.Cell] = card;
             card.SetOrder(10 + step.Cell);

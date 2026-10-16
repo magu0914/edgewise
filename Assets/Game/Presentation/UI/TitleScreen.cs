@@ -7,21 +7,27 @@ using UnityEngine.UI;
 
 namespace Edgewise.Game.UI
 {
-    /// <summary>タイトル画面: ロゴ（仮題）と「はじめる」「設定」（音量など）。背景の星空は常に動いている。</summary>
+    /// <summary>タイトル画面: ロゴ（仮題）と「はじめる」「設定」「カード図鑑」「クレジット」。背景の星空は常に動き、ロゴの背後で扇のカードが回る（TitleFan）。</summary>
     public sealed class TitleScreen : MonoBehaviour, IResponsiveUi
     {
         [SerializeField] TextMeshProUGUI logo;
         [SerializeField] TextMeshProUGUI subtitle;
         [SerializeField] Button startButton;
         [SerializeField] Button settingsButton;
+        [SerializeField] Button dexButton;
+        [SerializeField] Button creditsButton;
         [SerializeField] TextMeshProUGUI hint;
         [SerializeField] TextMeshProUGUI homage;
 
         public event Action StartPressed;
         public event Action SettingsPressed;
+        public event Action DexPressed;
+        public event Action CreditsPressed;
 
         public Button StartButton => startButton;
         public Button SettingsButton => settingsButton;
+        public Button DexButton => dexButton;
+        public Button CreditsButton => creditsButton;
 
         public void Build(GameAssets a)
         {
@@ -35,6 +41,8 @@ namespace Edgewise.Game.UI
             subtitle = UiKit.Label(root, "Subtitle", a, UiText.Subtitle, 30, Theme.Ink);
             startButton = UiKit.Button(root, "StartButton", a, UiText.Start, 34, out _, new Color(0.22f, 0.30f, 0.55f));
             settingsButton = UiKit.Button(root, "TitleSettingsButton", a, UiText.MenuSettings, 26, out _);
+            dexButton = UiKit.Button(root, "DexButton", a, UiText.TitleDex, 26, out _);
+            creditsButton = UiKit.Button(root, "CreditsButton", a, UiText.TitleCredits, 26, out _);
             hint = UiKit.Label(root, "Hint", a, UiText.TitleHint, 18, Theme.InkDim);
             homage = UiKit.Label(root, "Homage", a, UiText.Homage, 15, new Color(0.6f, 0.62f, 0.72f, 0.9f));
             ApplyLayout(false);
@@ -44,6 +52,8 @@ namespace Edgewise.Game.UI
         {
             startButton.onClick.AddListener(() => StartPressed?.Invoke());
             settingsButton.onClick.AddListener(() => SettingsPressed?.Invoke());
+            dexButton.onClick.AddListener(() => DexPressed?.Invoke());
+            creditsButton.onClick.AddListener(() => CreditsPressed?.Invoke());
         }
 
         public void ApplyLayout(bool portrait)
@@ -54,8 +64,15 @@ namespace Edgewise.Game.UI
             logo.characterSpacing = portrait ? 8f : 18f;
             UiKit.Place(subtitle.rectTransform, c, new Vector2(0f, portrait ? 110f : 20f), new Vector2(680f, 50f));
             UiKit.Place((RectTransform)startButton.transform, c, new Vector2(0f, portrait ? -120f : -110f), new Vector2(300f, 78f));
-            UiKit.Place((RectTransform)settingsButton.transform, c, new Vector2(0f, portrait ? -222f : -196f), new Vector2(portrait ? 240f : 200f, portrait ? 72f : 56f));
-            settingsButton.GetComponentInChildren<TextMeshProUGUI>().fontSize = portrait ? 32 : 26;
+            // 「はじめる」の下に 設定・カード図鑑・クレジット を 1 列に並べる
+            var subButtons = new[] { settingsButton, dexButton, creditsButton };
+            float bw = portrait ? 210f : 200f, gap = portrait ? 16f : 20f;
+            for (int i = 0; i < subButtons.Length; i++)
+            {
+                float x = (i - 1) * (bw + gap);
+                UiKit.Place((RectTransform)subButtons[i].transform, c, new Vector2(x, portrait ? -222f : -196f), new Vector2(bw, portrait ? 72f : 56f));
+                subButtons[i].GetComponentInChildren<TextMeshProUGUI>().fontSize = portrait ? 30 : 24;
+            }
             UiKit.Place(hint.rectTransform, c, new Vector2(0f, portrait ? -300f : -258f), new Vector2(680f, 30f));
             UiKit.Place(homage.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 18f), new Vector2(portrait ? 660f : 1100f, 60f));
         }

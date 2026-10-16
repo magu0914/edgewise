@@ -191,6 +191,7 @@ namespace Edgewise.Game.Controls
             card.SetRotation(0);
             card.SetAlpha(1f);
             card.SetLift(0f);
+            card.SetTiltTarget(Vector2.zero);
             _hand.Held = null;
             ClearPreview();
             _hand.Layout(true);
@@ -290,8 +291,31 @@ namespace Edgewise.Game.Controls
                 if (es != null && es.currentSelectedGameObject != null) es.SetSelectedGameObject(null);
                 HandlePointer();
                 HandleKeyboard();
+                UpdateHandTilt();
             }
             AnimateHeld();
+        }
+
+        /// <summary>
+        /// 手札の傾き（DESIGN §7-1 の層 5）: カーソルを乗せたカードはカーソルの方へ傾く。
+        /// キーボードで選んだカードは、ホロの光沢が見えるようにゆっくり揺れる。
+        /// </summary>
+        void UpdateHandTilt()
+        {
+            if (_mode != Mode.Idle) return;
+            int n = _hand.Cards.Count;
+            if (_keyboardMode)
+            {
+                int k = _hand.KeySelectIndex;
+                if (k >= 0 && k < n && _hand.Cards[k] != null)
+                {
+                    float t = Time.unscaledTime;
+                    _hand.Cards[k].SetTiltTarget(new Vector2(Mathf.Sin(t * 0.9f) * 0.55f, Mathf.Sin(t * 0.6f + 1f) * 0.35f));
+                }
+                return;
+            }
+            int h = _hand.HoverIndex;
+            if (h >= 0 && h < n && _hand.Cards[h] != null) _hand.Cards[h].TiltToward(_pointerWorld);
         }
 
         bool PointerOverUi(Vector2 pos)
@@ -508,7 +532,11 @@ namespace Edgewise.Game.Controls
 
             float k = 1f - Mathf.Exp(-dt / Mathf.Max(0.01f, _juice.pickTime * 0.5f));
             var t = _held.transform;
+            var before = t.position;
             t.position = Vector3.Lerp(t.position, target, k);
+            // 持っている間は動く向きへ傾ける（マスに吸い付いたら水平に戻す）
+            var vel = dt > 0f ? (t.position - before) / dt : Vector3.zero;
+            _held.SetTiltTarget(snapped ? Vector2.zero : new Vector2(vel.x, vel.y) * 0.12f);
             t.localScale = Vector3.Lerp(t.localScale, Vector3.one * scale, k);
             _held.SetAlpha(Mathf.Lerp(_held.Alpha, alpha, k));
             _held.SetLift(snapped ? 0.15f : 1f);

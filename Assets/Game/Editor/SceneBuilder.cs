@@ -80,6 +80,15 @@ namespace Edgewise.EditorTools
             juiceFx.Wire(assets.juice, sfx, layout, bgm);
             var flow = game.AddComponent<AppFlow>();
 
+            // タイトルの扇（4b）と図鑑のカード置き場（ワールド空間。カードは実行時にプレハブから作る）
+            var fanGo = new GameObject("TitleFan");
+            fanGo.transform.SetParent(game.transform, false);
+            var fan = fanGo.AddComponent<TitleFan>();
+            fan.Wire(assets, layout);
+            fanGo.SetActive(false);
+            var dexRoot = new GameObject("DexCards");
+            dexRoot.transform.SetParent(game.transform, false);
+
             // ---- UI ----
             var canvasGo = new GameObject("Canvas", typeof(RectTransform));
             canvasGo.layer = 5;
@@ -105,6 +114,10 @@ namespace Edgewise.EditorTools
             result.Build(assets);
             var menu = MakeScreen<MenuPanel>("Menu", canvasGo.transform);
             menu.Build(assets);
+            var dex = MakeScreen<CardDex>("Dex", canvasGo.transform);
+            dex.Build(assets, layout, dexRoot.transform);
+            var credits = MakeScreen<CreditsScreen>("Credits", canvasGo.transform);
+            credits.Build(assets);
             var settings = MakeScreen<SettingsPanel>("Settings", canvasGo.transform);
             settings.Build(assets);
             settings.gameObject.SetActive(false);
@@ -119,14 +132,19 @@ namespace Edgewise.EditorTools
             module.AssignDefaultActions();
 
             match.Wire(assets, board, hand0, hand1, hud, banner, layout, player, cards, juiceFx);
-            flow.Wire(assets, table, title, setup, hud, menu, result, banner, match, fps, settings, bgm);
+            flow.Wire(assets, table, title, setup, hud, menu, result, banner, match, fps, settings, bgm, dex, credits, fan);
             table.SetActive(false);
 
-            foreach (var c in new Component[] { layout, match, flow, board, hud, title, setup, result, menu, banner, settings, sfx, juiceFx, bgm })
+            foreach (var c in new Component[] { layout, match, flow, board, hud, title, setup, result, menu, banner, settings, sfx, juiceFx, bgm, dex, credits, fan })
                 EditorUtility.SetDirty(c);
             EditorSceneManager.MarkSceneDirty(scene);
+            // 保存前の内容（中身が同じなら書き戻さず、git の差分を出さない）
+            string before = System.IO.File.Exists(path) ? System.IO.File.ReadAllText(path) : null;
             EditorSceneManager.SaveScene(scene, path);
-            Debug.Log("[Edgewise] Built " + path);
+            bool changed = SceneFileIds.Normalize(path, before);
+            // 正規化したファイルを開き直し、メモリ上のシーンとファイルをそろえる
+            EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+            Debug.Log("[Edgewise] Built " + path + (changed ? "" : " (unchanged)"));
         }
 
         static T MakeScreen<T>(string name, Transform parent) where T : Component

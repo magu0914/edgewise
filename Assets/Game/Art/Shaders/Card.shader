@@ -204,16 +204,93 @@ Shader "Edgewise/Card"
                 return over(acc, bg, inside);
             }
 
+            // ---- 4. レベルごとの加工（_LevelFx: 0 素朴 / 1 金の縁 / 2 ホロ / 3 オーロラ。CardLevelFx.TierOf）----
+
+            float3 hue(float h)
+            {
+                return saturate(abs(frac(h + float3(0.0, 0.6666667, 0.3333333)) * 6.0 - 3.0) - 1.0);
+            }
+
+            // ランクのプレートと名前の帯から離れた所だけ 1（光沢・粒をかけない範囲）
+            float fxMaskAt(float2 p, float plate)
+            {
+                return smoothstep(0.0, 0.04, plate) * smoothstep(-0.43, -0.39, p.y);
+            }
+
+            // ホロ: 斜めの虹色の帯が、傾きに連動して流れる（傾けないときもゆっくり動く）。シルエットに強く、背景に弱く
+            float4 holo(float2 p, float4 acc, float mask, float sil)
+            {
+                float time = _Time.y;
+                float2 tl = _Tilt.xy;
+                float phase = dot(p, float2(0.9, 1.4)) * 1.6 + tl.x * 0.9 - tl.y * 0.7 + time * 0.035;
+                float3 rainbow = S(hue(frac(phase)));
+                float wave = (p.x * 1.6 - p.y * 1.0) * 7.0 + tl.x * 6.0 + tl.y * 4.5 + time * 0.35;
+                float band = pow(0.5 + 0.5 * sin(wave), 4.0);
+                float strength = (0.05 + 0.30 * band) * (0.75 + 0.9 * saturate(length(tl)));
+                float k = lerp(0.35, 1.0, sil);
+                acc.rgb += rainbow * strength * k * mask * acc.a;
+                // 光沢の筋（白いハイライト）
+                acc.rgb += float3(1, 1, 1) * pow(band, 6.0) * 0.22 * k * mask * acc.a;
+                return acc;
+            }
+
+            // オーロラ（背景の上、シルエットの下）: 揺れるカーテン
+            float4 aurora(float2 p, float4 acc, float mask)
+            {
+                float time = _Time.y;
+                float2 ap = p + _Tilt.xy * _TiltDepth.x * 1.5;
+                float n = fbm3(float2(ap.x * 2.0 + time * 0.07, time * 0.045 + 3.0));
+                float centerY = 0.20 + (n - 0.5) * 0.34 + sin(ap.x * 3.0 + time * 0.25) * 0.06;
+                float dy = ap.y - centerY;
+                float curtain = exp(-dy * dy / 0.028) * smoothstep(-0.30, 0.10, dy + 0.16);
+                float rays = 0.55 + 0.45 * sin(ap.x * 38.0 + n * 9.0 + time * 0.9);
+                float3 c1 = S(float3(0.30, 1.00, 0.70));
+                float3 c2 = S(float3(0.62, 0.42, 1.00));
+                float3 col = lerp(c1, c2, saturate(ap.x * 0.9 + 0.5 + (n - 0.5)));
+                acc.rgb += col * curtain * rays * 0.85 * mask * acc.a;
+                return acc;
+            }
+
+            // きらめきの粒: ゆっくり昇る小さな光（十字のきらめきつき）
+            float4 sparkles(float2 p, float4 acc, float mask)
+            {
+                float time = _Time.y;
+                float2 g = float2(p.x * 9.0, p.y * 7.0 - time * 0.22) + _Tilt.xy * 0.35;
+                float2 gi = floor(g);
+                float h = hash21(gi + 11.0);
+                float2 off = float2(hash21(gi + 2.7), hash21(gi + 8.3)) - 0.5;
+                float2 dv = (frac(g) - 0.5 - off * 0.6) / float2(9.0, 7.0);
+                float tw = pow(0.5 + 0.5 * sin(time * (2.2 + h * 3.0) + h * 30.0), 3.0);
+                float core = exp(-dot(dv, dv) / 0.000018);
+                float glint4 = exp(-abs(dv.x) * 900.0) * exp(-abs(dv.y) * 140.0) + exp(-abs(dv.y) * 900.0) * exp(-abs(dv.x) * 140.0);
+                float s = step(0.62, h) * (core + glint4 * 0.8) * tw;
+                acc.rgb += float3(1.0, 0.95, 0.80) * s * 1.6 * mask * acc.a;
+                return acc;
+            }
+
+            // 金の縁（Lv4 以上）: 枠の内側の細い金の線と、四隅の菱形
+            float4 goldTrim(float2 p, float4 acc, float inside, float d)
+            {
+                float3 gold = S(float3(1.0, 0.84, 0.46)) * 1.35;
+                float line1 = saturate(1.0 - abs(d + 0.064) / 0.0055);
+                acc = over(acc, gold, line1 * inside * 0.95);
+                float2 c = abs(p) - float2(0.5 - 0.064, 0.625 - 0.064);
+                float diamond = abs(c.x) + abs(c.y) - 0.026;
+                acc = over(acc, gold * 1.2, fill(diamond) * inside);
+                return acc;
+            }
+
             // カード絵のセル内の座標（0..1）。Pivot の回転と、傾きの層ずれを含める
             float2 artUv(float2 p, float depth)
             {
-                float2 q = p - ART_C + _Tilt.xy * depth;
+                // 浮いている層ほどカーソルの方（傾いて奥へ沈む側）へずれて見える
+                float2 q = p - ART_C - _Tilt.xy * depth;
                 q = rot(q, _EmblemRot);
                 return q / ART_S + 0.5;
             }
 
             // 2. シルエット ＋ 3. 星座
-            float4 cardArt(float2 p, float4 acc, float inside)
+            float4 cardArt(float2 p, float4 acc, float inside, float fxMask)
             {
                 if (_ArtCount.z < 0.5) return acc;
                 float time = _Time.y;
@@ -260,7 +337,8 @@ Shader "Edgewise/Card"
 
                 acc = over(acc, body, sil * 0.94);
 
-                // 4. レベルごとの加工（4b）: _LevelFx をここに重ねる（金の縁・ホロ・オーロラ）
+                // 4. レベルごとの加工: Lv7〜9 のホロ（シルエットに強く、背景に弱く。ランクのプレートと名前の帯にはかけない）
+                if (_LevelFx > 1.5 && _LevelFx < 2.5) acc = holo(p, acc, inside * fxMask, sil);
 
                 // ---- 3. 星座 ----
                 float2 suv = artUv(p, _TiltDepth.z);
@@ -303,8 +381,11 @@ Shader "Edgewise/Card"
             float4 face(float2 p, float4 acc, float inside, float d)
             {
                 float3 owner = _OwnerColor.rgb;
+                float plate = sdRoundBox(p - float2(-0.235, 0.32), float2(0.205, 0.228), 0.07);
+                float fxMask = fxMaskAt(p, plate);
                 acc = nebula(p, acc, inside);
-                acc = cardArt(p, acc, inside);
+                if (_LevelFx > 2.5) acc = aurora(p, acc, inside * fxMask);
+                acc = cardArt(p, acc, inside, fxMask);
 
                 // 名前の帯
                 float band = fill(p.y + 0.43) * inside;
@@ -319,6 +400,7 @@ Shader "Edgewise/Card"
                 acc = over(acc, frameCol, inFrame);
                 float innerLine = (1.0 - _Pattern) * inside * saturate(1.0 - abs(d + 0.082) / 0.009);
                 acc = over(acc, owner, innerLine * 0.9);
+                if (_LevelFx > 0.5) acc = goldTrim(p, acc, inside, d);
 
                 // 属性・系統のバッジ（丸）
                 float de = length(p - float2(0.335, 0.47)) - 0.092;
@@ -361,7 +443,7 @@ Shader "Edgewise/Card"
                 acc = over(acc, S(float3(1.0, 0.86, 0.52)) * 1.3, saturate(sparkle) * inside);
 
                 // ランクの下地: 濃いプレート（絵の上でも数字が一番読めるように、まわりを少し暗くしてから濃く塗る。縁だけ所有者の色）
-                float plate = sdRoundBox(p - float2(-0.235, 0.32), float2(0.205, 0.228), 0.07);
+                if (_LevelFx > 2.5) acc = sparkles(p, acc, inside * fxMask);
                 acc = over(acc, float3(0, 0, 0), exp(-max(plate, 0.0) / 0.025) * 0.45 * step(0.0, plate) * inside);
                 acc = over(acc, S(float3(0.012, 0.014, 0.03)), fill(plate) * 0.95);
                 acc = over(acc, owner * 0.75, saturate(1.0 - abs(plate) / 0.007) * 0.55);
