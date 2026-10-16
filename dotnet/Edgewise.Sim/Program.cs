@@ -25,6 +25,7 @@ namespace Edgewise.Sim
     ///       --picks K        標準的な手持ち: それより前の相手 1 人につき何枚もらった想定か（既定 1）
     ///       --player SPEC    プレイヤー役の AI（既定 normal。--match と同じ書式）
     ///       --only IDS       計測する相手の ID（カンマ区切り）
+    ///       --sudden-death-regions N,M  計測専用: 指定した星域に Sudden Death を足す（ルール変更の提案の効果を測る）
     ///       --tune SPEC      調整用の上書き "ID:ai=normal/noise=60;cards=a+b+c;slack=2|ID2:..."（CampaignSim.Effective）
     ///   --match では "opp.<相手の ID>"（例 opp.harbor-master）で星図巡りの相手の AI（性格つき）を指定できる。
     ///   --rules の region1〜region4 は星図巡りの星域のルール（Pivot トークンはゲーム本体の既定）。
@@ -46,6 +47,7 @@ namespace Edgewise.Sim
             string player = "normal";
             string only = null;
             string tune = null;
+            string sdRegions = null;
             try
             {
                 for (int i = 0; i < args.Length; i++)
@@ -75,6 +77,7 @@ namespace Edgewise.Sim
                         case "--player": player = Next(); break;
                         case "--only": only = Next(); break;
                         case "--tune": tune = Next(); break;
+                        case "--sudden-death-regions": sdRegions = Next(); break;
                         default: throw new ArgumentException("unknown option " + a);
                     }
                 }
@@ -95,7 +98,7 @@ namespace Edgewise.Sim
             {
                 try
                 {
-                    return CampaignSim.Run(deals, seed, threads, picks, player, only, tune, outPath, args);
+                    return CampaignSim.Run(deals, seed, threads, picks, player, only, tune, outPath, args, sdRegions);
                 }
                 catch (ArgumentException e)
                 {

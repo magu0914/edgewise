@@ -10,16 +10,20 @@ namespace Edgewise.Core.Campaign
 {
     /// <summary>
     /// 星図巡りで使う AI の強さの段階（DESIGN §12-2 の「Easy+」「Normal+」「Hard−」）。Phase 5a の自己対戦で調整した値（docs/BALANCE.md）。
-    /// フリー対戦の Easy（ノイズ ±150・見落とし 40%）は、プレイヤー役の Normal に対して手持ちの差を付けても 9 割以上負けるので、
-    /// 星図巡りの Easy は「1 手先だけを読み、ノイズ ±40・見落としなし」にした。
+    /// 星域 1・2（基本ルールと Same/Plus）は、強さの近い同士だと引き分けが 5 割を超え、カードが増えずに進行が止まって感じる（§12-9 の追加目標）。
+    /// そこで星域 1・2 の相手は手の選び方の揺れ（ノイズ）を大きくしてある: 読みの深さは段階どおりだが、ときどき最善でない手を選ぶので、
+    /// プレイヤーが引き分けに持ち込まれず勝ち切れる。
     /// </summary>
     public static class CampaignAi
     {
-        /// <summary>1 手先の貪欲（ノイズ ±40、見落としなし）。</summary>
-        public static readonly AiProfile Easy = AiProfile.Easy.WithNoise(40, 0);
+        /// <summary>フリー対戦の Easy と同じ（1 手先、ノイズ ±150、Same/Plus/Combo の見落とし 40%）。</summary>
+        public static readonly AiProfile Easy = AiProfile.Easy;
 
-        /// <summary>2 手先まで読む（ノイズ ±60）。</summary>
-        public static readonly AiProfile EasyPlus = AiProfile.Normal.WithMaxDepth(2).WithNoise(60, 0).WithName("Easy+");
+        /// <summary>1 手先、ノイズ ±80、見落としなし。</summary>
+        public static readonly AiProfile EasyPlus = AiProfile.Easy.WithNoise(80, 0).WithName("Easy+");
+
+        /// <summary>星域 1・2 の Normal: 3 手先まで読むが、ノイズ（揺れ）を大きくして引き分けを減らす（相手ごとに幅を変える）。</summary>
+        public static AiProfile LooseNormal(int noise) => AiProfile.Normal.WithNoise(noise, 0);
 
         /// <summary>フリー対戦の Normal と同じ。</summary>
         public static readonly AiProfile Normal = AiProfile.Normal;
@@ -114,11 +118,11 @@ namespace Edgewise.Core.Campaign
                         new[] { "守りは退屈に見えて、最後に効くのさ。" },
                         new[] { "持っていけ。灯りの番の合間に磨いた札だ。" },
                         new[] { "この札はしばらく灯台で預かる。取り返しに来るといい。" })),
-                new Opponent("harbor-master", "ガーネット", "港の親方", "harbor", true, 15 + BossCapBonus, "Normal", "攻め気（強い辺で押す）",
-                    CampaignAi.Normal.WithPersonality(CampaignPersonalities.Aggressive),
+                new Opponent("harbor-master", "マーロウ", "港の親方", "harbor", true, 15 + BossCapBonus, "Normal", "攻め気（強い辺で押す）",
+                    CampaignAi.LooseNormal(120).WithPersonality(CampaignPersonalities.Aggressive),
                     new[] { "glimmouse", "dustwisp", "scalefry", "emberkit", "bolthare", "hollowshade", "voltsparrow" }, 3,
                     new Dialogue(
-                        new[] { "港の親方ガーネットだ！", "強い辺で正面から押す、それだけさ。かかってきな！" },
+                        new[] { "港の親方マーロウだ！", "強い辺で正面から押す、それだけさ。かかってきな！" },
                         new[] { "ははっ、押し負けたか！ いい腕してるじゃないか。" },
                         new[] { "押して押して押し切る！ これが港の流儀だよ。" },
                         new[] { "勝った者には報酬だ。好きなのを持っていきな。" },
@@ -128,7 +132,7 @@ namespace Edgewise.Core.Campaign
             new Region("library", 2, "鏡の書庫", new RuleSet(open: true, same: true, sameWall: true, plus: true), 25, new[]
             {
                 new Opponent("library-scribe", "リーフ", "写本係", "library", false, 25, "Normal", "Same を狙う",
-                    CampaignAi.Normal.WithPersonality(CampaignPersonalities.SameHunter),
+                    CampaignAi.LooseNormal(180).WithPersonality(CampaignPersonalities.SameHunter),
                     new[] { "glimmouse", "coglet", "scalefry", "frostnewt", "rivetcrab", "gearowl", "orreryx" }, 3,
                     new Dialogue(
                         new[] { "写本は一字一句、同じに写すのが仕事です。", "盤の上でも、同じ数字が並ぶ瞬間は見逃しません。" },
@@ -137,7 +141,7 @@ namespace Edgewise.Core.Campaign
                         new[] { "この札をどうぞ。写しではなく、本物ですよ。" },
                         new[] { "この札は書庫で保管します。閲覧はいつでもどうぞ。" })),
                 new Opponent("library-twins", "ピアとピオ", "双子の司書", "library", false, 25, "Normal", "Plus を狙う",
-                    CampaignAi.Normal.WithPersonality(CampaignPersonalities.PlusHunter),
+                    CampaignAi.LooseNormal(180).WithPersonality(CampaignPersonalities.PlusHunter),
                     new[] { "dustwisp", "emberkit", "pyxmoth", "mirelamp", "cinderdrake", "clockwyrm", "gloamveil" }, 3,
                     new Dialogue(
                         new[] { "ピアと！", "ピオです！ 足して同じなら、ふたりいっしょにひっくり返すよ！" },
@@ -146,7 +150,7 @@ namespace Edgewise.Core.Campaign
                         new[] { "はい、どうぞ。ふたりで選んだ……", "……わけじゃないけど、どうぞ！" },
                         new[] { "これ、もらってもいい？", "いいよね！" })),
                 new Opponent("library-curator", "セレスト", "館長", "library", true, 25 + BossCapBonus, "Normal+", "連鎖重視",
-                    CampaignAi.NormalPlus.WithPersonality(CampaignPersonalities.ChainSeeker),
+                    CampaignAi.NormalPlus.WithNoise(120, 0).WithPersonality(CampaignPersonalities.ChainSeeker),
                     new[] { "frostnewt", "bolthare", "gearowl", "stonetoad", "hollowshade", "tidewraith", "aquilaburst" }, 3,
                     new Dialogue(
                         new[] { "書庫の本は、一冊が次の一冊を呼ぶように並んでいます。", "一枚の裏返しが次を呼ぶ。その連なりをお見せしましょう。" },
