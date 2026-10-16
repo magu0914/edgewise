@@ -105,6 +105,8 @@ namespace Edgewise.Game.Juice
         [Range(0f, 1f)] public float volCombo = 0.75f;
         [Range(0f, 1f)] public float volResult = 0.8f;
         [Range(0f, 1f)] public float volButton = 0.45f;
+        [Tooltip("星図巡り: 報酬（NEW! / ×2）・鍵が外れる音")] [Range(0f, 1f)] public float volReward = 0.8f;
+        [Tooltip("星図巡り: 会話の文字送りの音")] [Range(0f, 1f)] public float volTalk = 0.25f;
         [Tooltip("カーソル移動の音を続けて鳴らす最短の間隔（秒）")] public float cursorSoundInterval = 0.05f;
 
         /// <summary>ScriptableObject が見つからないとき（テストなど）の既定値。</summary>

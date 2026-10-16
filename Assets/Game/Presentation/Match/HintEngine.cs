@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Diagnostics;
 using Edgewise.Core;
 using Edgewise.Core.AI;
@@ -44,13 +45,14 @@ namespace Edgewise.Game.Match
         /// <summary>このヒントの対象の局面（手番が変わったら古いヒントを捨てるのに使う）。</summary>
         public GameState State => _state;
 
-        public void Begin(GameState state, Player viewer, int budgetNodes, long seed)
+        public void Begin(GameState state, Player viewer, int budgetNodes, long seed, IReadOnlyList<CardDef> cardPool = null,
+            CardPoolModel poolModel = CardPoolModel.Distinct)
         {
             _state = state;
             _viewer = viewer;
             IsDone = false;
             var profile = AiProfile.Hard.WithMaxNodes(budgetNodes < 1 ? 1 : budgetNodes);
-            _session = SearchSession.CreateAnalysis(state, viewer, profile, seed, CardCatalog.All);
+            _session = SearchSession.CreateAnalysis(state, viewer, profile, seed, cardPool ?? CardCatalog.All, null, poolModel);
         }
 
         public void Cancel()

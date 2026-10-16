@@ -58,6 +58,12 @@ namespace Edgewise.Game.Match
         /// <summary>0 なら毎回ランダム。0 以外なら配牌・先攻・CPU の乱数がすべて固定される。</summary>
         public long seed;
 
+        /// <summary>
+        /// 星図巡りの対戦（5b-1）。null ならフリー対戦。設定があれば配牌・ルール・先攻はこの GameConfig、CPU はこの相手の AI で、
+        /// 決定化は CardPoolModel.Shared（同じカードを両者が持ちうる）。保存しない。
+        /// </summary>
+        [NonSerialized] public CampaignMatchSetup campaign;
+
         const string Key = "edgewise.matchSettings.v1";
 
         public MatchSettings Clone() => (MatchSettings)MemberwiseClone();
@@ -102,6 +108,22 @@ namespace Edgewise.Game.Match
             PlayerPrefs.SetString(Key, JsonUtility.ToJson(copy));
             PlayerPrefs.Save();
         }
+    }
+
+    /// <summary>星図巡りの対戦の設定（MatchSettings.campaign）。</summary>
+    public sealed class CampaignMatchSetup
+    {
+        /// <summary>CampaignRules.MatchConfig（星域のルール・両者のデッキ・seed。プレイヤーが P0）。</summary>
+        public GameConfig Config;
+
+        /// <summary>相手の AI（性格つき）。</summary>
+        public AiProfile Profile;
+
+        /// <summary>相手（HUD の名前と立ち絵）。</summary>
+        public Edgewise.Core.Campaign.Opponent Opponent;
+
+        /// <summary>ヒントの決定化の候補（相手の持ちカードをすべて見ていればそれ、そうでなければ全カード）。</summary>
+        public IReadOnlyList<CardDef> HintPool;
     }
 
     /// <summary>

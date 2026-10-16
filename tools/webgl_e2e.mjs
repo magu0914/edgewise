@@ -5,12 +5,32 @@
 //   node tools/webgl_e2e.mjs --url http://127.0.0.1:8765/ --out Logs/shots/3a [--seed 7] [--slow 4]
 // 終了時に Chrome を必ず終了する（例外時も）。
 import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync, mkdtempSync, readFileSync, existsSync, statSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, resolve, extname, normalize } from 'node:path';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((a, v, i, arr) => (v.startsWith('--') ? [...a, [v.slice(2), arr[i + 1]]] : a), []));
-const BASE = args.url ?? 'http://127.0.0.1:8765/';
+// --serve DIR: このスクリプトの中で DIR を HTTP で配信する（--serve-port、既定 8772。終了時に必ず止める）
+const SERVE_PORT = Number(args['serve-port'] ?? 8772);
+const BASE = args.serve ? `http://127.0.0.1:${SERVE_PORT}/` : (args.url ?? 'http://127.0.0.1:8765/');
+let server = null;
+if (args.serve) {
+  const root = resolve(args.serve);
+  const types = { '.html': 'text/html', '.js': 'application/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.png': 'image/png', '.css': 'text/css', '.ico': 'image/x-icon' };
+  server = createServer((req, res) => {
+    let p = decodeURIComponent((req.url ?? '/').split('?')[0]);
+    if (p.endsWith('/')) p += 'index.html';
+    const file = normalize(join(root, p));
+    if (!file.startsWith(root) || !existsSync(file) || !statSync(file).isFile()) { res.writeHead(404); res.end(); return; }
+    // .unityweb は圧縮のまま返す（ビルドは decompressionFallback = true なのでローダーが JS で解凍する）
+    const ext = extname(file).toLowerCase();
+    res.writeHead(200, { 'Content-Type': types[ext] ?? 'application/octet-stream', 'Cache-Control': 'no-store' });
+    res.end(readFileSync(file));
+  });
+  await new Promise((r) => server.listen(SERVE_PORT, '127.0.0.1', r));
+  console.log('[e2e] serving', root, 'on', BASE);
+}
 const OUT = resolve(args.out ?? 'Logs/shots/3b');
 const COMBO_SEEDS = (args['combo-seeds'] ?? '2,12,16,17,18').split(',');
 const SEED = args.seed ?? '7';
@@ -688,6 +708,324 @@ async function runTitle() {
   await shot('01_title_fan_v2_portrait_later');
 }
 
+// ---------------------------------------------------------------------------
+// Phase 5b-1: 星図巡りの通し（横 1280×720 と縦 360×640 の撮影つき）。
+//   node tools/webgl_e2e.mjs --scenario 5b1 --serve Builds/WebGL --serve-port 8772 --out Logs/shots/5b1
+// A（横・x1）: 新しく始める → 導入（7 枚）→ 星図 → 星域 1 → ミラにデッキを組んで挑む → ヒントの手で勝つ → 報酬 → 星図 → タイトル（続きあり）
+//             → 設定（星図巡りのタブ）でデータを消す（2 段階の確認）。
+// B（横・x2・?grant）: 新しく始める → 主マーロウに勝つまで挑む（デッキの上限超えを撮る）→ 巡り終えた帯 → 星図で星域 2 の鍵が外れる。
+// C（縦 360×640・x2・?grant）: タイトル（続きあり）→ 設定でデータを消す → A・B と同じ画面を縦で撮る。
+// ---------------------------------------------------------------------------
+const GRANT = 'lynxlight,gearowl,cinderdrake,hollowshade,stonetoad,emberscale,aquilaburst,leomane';
+const STARTER = ['glimmouse', 'dustwisp', 'coglet', 'scalefry', 'pyxmoth', 'rivetcrab', 'mirelamp'];
+
+function lastLine(re, from = 0) {
+  for (let i = consoleLines.length - 1; i >= from; i--) {
+    const m = consoleLines[i].line.match(re);
+    if (m) return { m, index: i, line: consoleLines[i].line };
+  }
+  return null;
+}
+
+async function clickUi(screen, name, from) {
+  const r = uiRect(screen, name, from);
+  await click(r.x, r.y);
+}
+
+/** 直近の "screen X" の行（なければ待つ）。 */
+async function waitScreen(name, from, timeout = 30000) {
+  return (await waitLine(new RegExp('^screen ' + name + ' '), timeout, from)).index;
+}
+
+function rewardCards(from) {
+  const cards = [];
+  for (let i = from; i < consoleLines.length; i++) {
+    const m = consoleLines[i].line.match(/^reward card (\d+) (-?\d+) (-?\d+)/);
+    if (m) cards[+m[1]] = { x: +m[2], y: +m[3] };
+  }
+  return cards;
+}
+
+/** 会話を待ってスキップする（会話が出なければ null）。 */
+async function skipDialogue(from, shotName) {
+  const d = await waitLine(/^dialogue 0\/(\d+)/, 20000, from);
+  const at = (await waitLine(/^screen Dialogue /, 5000, d.index)).index;
+  if (shotName) {
+    await sleep(1400);
+    await shot(shotName);
+  }
+  await clickUi('Dialogue', 'SkipButton', at);
+  await waitLine(/^dialogue end/, 10000, d.index);
+}
+
+/** 自分の手番ごとにヒントを押して、その手（手札 → マス）をマウスで置く。終局したら結果の行を返す。 */
+async function playHinted(firstTurnShot) {
+  let moves = 0;
+  while (true) {
+    const start = cursor;
+    const t0 = Date.now();
+    let turn = null;
+    while (true) {
+      const end = consoleLines.slice(start).findIndex((l) => /^end /.test(l.line));
+      const aw = consoleLines.slice(start).findIndex((l) => /^await turn=/.test(l.line));
+      if (end >= 0 && (aw < 0 || end < aw)) {
+        cursor = start + end + 1;
+        const m = consoleLines[start + end].line.match(/^end (\d+)-(\d+) (\S+)/);
+        return { moves, score: [+m[1], +m[2]], result: m[3], index: start + end };
+      }
+      if (aw >= 0) { cursor = start + aw; turn = await readTurn(); break; }
+      if (Date.now() - t0 > 240000) throw new Error('timeout waiting for my turn');
+      await sleep(40);
+    }
+    await sleep(200);
+    if (moves === 0 && firstTurnShot) { await sleep(300); await shot(firstTurnShot); }
+    const hb = consoleLines.length;
+    // HUD のボタンの位置は手番の直前（await の前）にログに出る
+    await clickUi('Hud', 'HintButton', Math.max(0, turn.index - 60));
+    const h = await waitLine(/^hint (\d+):(\d+) r(\d) (\d+)-(\d+)/, 60000, hb);
+    const hi = +h.m[1], ci = +h.m[2];
+    const card = turn.hand[hi], cell = turn.cells[ci];
+    await move(card.x, card.y);
+    await sleep(80);
+    await mouse('mousePressed', card.x, card.y);
+    await sleep(80);
+    await drag(card.x, card.y, cell.x, cell.y, 10);
+    await sleep(150);
+    await mouse('mouseReleased', cell.x, cell.y);
+    moves++;
+    await sleep(150);
+  }
+}
+
+/** 星図から: 星域 1 → 相手 opp → デッキ（onDeck で操作）→ 挑む → 会話 → 対戦（ヒント）→ 結果。勝つまで maxTries 回。 */
+async function challengeUntilWin(opp, maxTries, shots) {
+  for (let attempt = 1; attempt <= maxTries; attempt++) {
+    const mapAt = await waitScreen('Map', Math.max(0, consoleLines.length - 400));
+    await sleep(600);
+    if (attempt === 1 && shots.map) await shot(shots.map);
+    await clickUi('Map', 'Region1', mapAt);
+    const rAt = await waitScreen('Region', mapAt);
+    await sleep(700);
+    if (attempt === 1 && shots.region) await shot(shots.region);
+    await clickUi('Region', 'Challenge' + opp, rAt);
+    let dAt = await waitScreen('Deck', rAt);
+    await sleep(500);
+    // 一覧の位置は次のフレームのログが正しい
+    dAt = lastLine(/^screen Deck /, dAt).index;
+    if (attempt === 1 && shots.onDeck) dAt = await shots.onDeck(dAt);
+    await clickUi('Deck', 'BeginButton', dAt);
+    const talkFrom = consoleLines.length;
+    await skipDialogue(talkFrom, attempt === 1 ? shots.dialogue : null);
+    await waitLine(/^campaign match /, 20000, talkFrom);
+    const r = await playHinted(attempt === 1 ? shots.match : null);
+    log(`match vs ${opp}: ${r.score.join('-')} ${r.result} (${r.moves} moves)`);
+    results.matches.push({ opp, score: r.score, result: r.result });
+    const resAt = await waitScreen('Result', r.index, 60000);
+    await sleep(600);
+    await clickUi('Result', 'NextButton', resAt);
+    if (r.result === 'p0') return resAt;
+    // 引き分け・負け: 会話（負け）→ 星図
+    const after = consoleLines.length;
+    if (r.result === 'p1') await skipDialogue(after, null);
+    await waitLine(/^campaign \S+ -> Map/, 20000, after);
+  }
+  throw new Error('could not win in ' + maxTries + ' tries');
+}
+
+/** 勝った後: 会話 → 報酬（裏向き → めくれた NEW! の瞬間）→ 次へ。 */
+async function takeReward(resAt, shots) {
+  await skipDialogue(resAt, null);
+  const shown = await waitLine(/^reward shown (\d+)/, 30000, resAt);
+  const count = +shown.m[1];
+  let at = shown.index;
+  for (let p = 0; p < count; p++) {
+    await waitLine(/^reward card \d+ /, 10000, at);
+    await sleep(500);
+    const cards = rewardCards(at);
+    const open = cards.map((c, i) => (c ? i : -1)).filter((i) => i >= 0);
+    // 撮影用: 対戦のログ（相手のデッキの並び ＝ 報酬の並び）から、まだ持っていないカードを選ぶ（NEW! を撮るため）
+    const m = lastLine(/^campaign match \S+ deck \S+ vs (\S+)/);
+    const ids = m ? m.m[1].split(',') : [];
+    const fresh = open.filter((i) => ids[i] && !(shots.owned ?? []).includes(ids[i]));
+    const pick = fresh.length ? fresh[0] : open[Math.min(open.length - 1, 2)];
+    // カーソルを乗せる（傾いて浮く）
+    const c = cards[pick];
+    for (let k = 0; k <= 8; k++) { await move(c.x - 30 + k * 5, c.y - 25 + k * 3); await sleep(30); }
+    await sleep(700);
+    if (p === 0 && shots.facedown) await shot(shots.facedown);
+    const before = consoleLines.length;
+    await mouse('mousePressed', c.x, c.y);
+    await sleep(60);
+    await mouse('mouseReleased', c.x, c.y);
+    const rv = await waitLine(/^reward reveal (\S+) (\S+)/, 15000, before);
+    log('reward', rv.line);
+    results.rewards.push(rv.line);
+    await sleep(250);
+    if (p === 0 && shots.reveal) await shot(shots.reveal);
+    at = (await waitLine(/^reward landed /, 15000, before)).index;
+  }
+  const rAt = await waitScreen('Reward', at, 20000);
+  await sleep(500);
+  if (shots.done) await shot(shots.done);
+  const nextAt = consoleLines.length;
+  await clickUi('Reward', 'RewardNextButton', rAt);
+  return nextAt;
+}
+
+async function newGameIntro(from, shots, titleScreen = 'Title', titleAt = null) {
+  const t = titleAt ?? await waitScreen('Title', from, 120000);
+  await sleep(1500);
+  if (shots.titleNew) await shot(shots.titleNew);
+  await clickUi(titleScreen, 'CampaignButton', t);
+  const iAt = await waitScreen('Intro', t, 30000);
+  await sleep(300);
+  const cards = rewardCards(t);
+  for (const i of [0, 2, 4]) {
+    const b = consoleLines.length;
+    await click(cards[i].x, cards[i].y);
+    await waitLine(new RegExp('^intro reveal ' + i + ' '), 8000, b);
+    await sleep(250);
+  }
+  await sleep(500);
+  if (shots.intro) await shot(shots.intro);
+  await clickUi('Intro', 'RevealAllButton', iAt);
+  await waitLine(/^intro received/, 20000, iAt);
+  const nAt = await waitScreen('Reward', iAt, 20000);
+  await sleep(400);
+  await clickUi('Reward', 'RewardNextButton', nAt);
+  await waitLine(/^campaign Intro -> Map/, 10000, nAt);
+}
+
+async function openSettingsAndErase(titleAt, shots, titleScreen = 'Title') {
+  await clickUi(titleScreen, 'TitleSettingsButton', titleAt);
+  const sAt = await waitScreen('Settings', titleAt);
+  await sleep(300);
+  await clickUi('Settings', 'TabCampaign', sAt);
+  const cAt = lastLine(/^screen Settings /).index;
+  await sleep(500);
+  if (shots.settings) await shot(shots.settings);
+  await clickUi('Settings', 'EraseButton', cAt);
+  const c1 = await waitScreen('Confirm1', cAt);
+  await sleep(300);
+  await clickUi('Confirm1', 'EraseYes', c1);
+  const c2 = await waitScreen('Confirm2', c1);
+  await sleep(400);
+  if (shots.confirm) await shot(shots.confirm);
+  await clickUi('Confirm2', 'EraseYes', c2);
+  await waitLine(/^campaign erased/, 5000, c2);
+  await waitLine(/^title progress -/, 5000, c2);
+  await sleep(300);
+  await clickUi('Settings', 'CloseButton', cAt);
+  await sleep(300);
+}
+
+/** デッキ: 枠 0 を外して Lv7 を入れ、上限超え（赤）を撮る → おまかせを撮る。 */
+function deckOverThenAuto(overShot, autoShot) {
+  return async (dAt) => {
+    await sleep(400);
+    await clickUi('Deck', 'Slot0', dAt);
+    await sleep(250);
+    await clickUi('Deck', 'Own_leomane', dAt);
+    await waitLine(/^deck \S+ total \d+\/\d+ over/, 5000, dAt);
+    await sleep(500);
+    await shot(overShot);
+    const b = consoleLines.length;
+    await clickUi('Deck', 'AutoButton', dAt);
+    await waitLine(/^deck \S+ total \d+\/\d+ ready/, 5000, b);
+    await sleep(600);
+    await shot(autoShot);
+    return dAt;
+  };
+}
+
+async function run5b1() {
+  results.matches = [];
+  results.rewards = [];
+  const checks = {};
+
+  // ---------------- A: 横・x1 ----------------
+  let navAt = consoleLines.length;
+  await send('Page.navigate', { url: `${BASE}?log&seed=${SEED}&speed=x1` });
+  await waitLine(/^campaign load (\S+) nosave/, 120000, navAt);
+  await newGameIntro(navAt, { titleNew: 'L00_title_new', intro: 'L02_intro_receive_7' });
+  const resAt = await challengeUntilWin(0, 4, {
+    map: 'L03_map_region1_only', region: 'L05_region', dialogue: 'L07_dialogue', match: 'L08_match_opponent_hud',
+    onDeck: async (dAt) => {
+      await sleep(400);
+      await clickUi('Deck', 'AutoButton', dAt);
+      await sleep(600);
+      await shot('L06b_deck_auto');
+      return dAt;
+    },
+  });
+  await takeReward(resAt, { facedown: 'L09a_reward_facedown', reveal: 'L09b_reward_new', done: 'L09c_reward_done', owned: STARTER });
+  const mAt = await waitScreen('Map', resAt, 30000);
+  await sleep(600);
+  checks.mapAfterWin = lastLine(/^campaign \S+ -> Map/).line;
+  await clickUi('Map', 'MapBackButton', mAt);
+  const tAt = await waitScreen('Title', mAt);
+  const prog = await waitLine(/^title progress (.+)/, 5000, mAt);
+  checks.titleProgress = prog.m[1];
+  await sleep(1500);
+  await shot('L01_title_continue');
+  await openSettingsAndErase(tAt, { settings: 'L12_settings', confirm: 'L12b_settings_erase_confirm' });
+  checks.erased = true;
+  results.fps = consoleLines.filter((l) => /^fps/.test(l.line)).map((l) => l.line);
+
+  // ---------------- B: 横・x2・主を倒す ----------------
+  navAt = consoleLines.length;
+  await send('Page.navigate', { url: `${BASE}?log&seed=${+SEED + 1}&speed=x2&grant=${GRANT}` });
+  await waitLine(/^campaign load (\S+) nosave/, 120000, navAt);
+  await newGameIntro(navAt, {});
+  const bossAt = await challengeUntilWin(2, 6, { onDeck: deckOverThenAuto('L06a_deck_over_cap', 'L06b2_deck_auto_boss') });
+  const bNext = await takeReward(bossAt, {});
+  await skipDialogue(bNext, null); // 主の「星域を抜けた」台詞
+  await waitLine(/^cleared shown/, 20000, bossAt);
+  await sleep(250);
+  await shot('L10_cleared_band');
+  const ub = await waitLine(/^map unlock library begin/, 20000, bossAt);
+  await sleep(950);
+  await shot('L04_map_unlock_moment');
+  await waitLine(/^map unlock library done/, 20000, ub.index);
+  await sleep(300);
+  await shot('L04b_map_region2_open');
+  checks.unlocked = true;
+
+  // ---------------- C: 縦 360×640 ----------------
+  navAt = consoleLines.length;
+  await send('Page.navigate', { url: `${BASE}?log&seed=${+SEED + 2}&speed=x2&grant=${GRANT}` });
+  await waitLine(/^campaign load (\S+) save/, 120000, navAt);
+  const lt = await waitScreen('Title', navAt, 60000);
+  await sleep(800);
+  // 縦に切り替えると、Unity がボタンの新しい位置を出す（screen Portrait）
+  await send('Emulation.setDeviceMetricsOverride', { width: 360, height: 640, deviceScaleFactor: 1, mobile: false });
+  const pt = await waitScreen('Portrait', lt, 10000);
+  await sleep(1500);
+  await shot('P01_title_continue');
+  await openSettingsAndErase(pt, { settings: 'P12_settings', confirm: 'P12b_settings_erase_confirm' }, 'Portrait');
+  await newGameIntro(pt, { intro: 'P02_intro_receive_7' }, 'Portrait', pt);
+  const pBoss = await challengeUntilWin(2, 6, {
+    map: 'P03_map_region1_only', region: 'P05_region', dialogue: 'P07_dialogue', match: 'P08_match_opponent_hud',
+    onDeck: deckOverThenAuto('P06a_deck_over_cap', 'P06b_deck_auto'),
+  });
+  const pNext = await takeReward(pBoss, { facedown: 'P09a_reward_facedown', reveal: 'P09b_reward_new', done: 'P09c_reward_done', owned: [...STARTER, ...GRANT.split(',')] });
+  await skipDialogue(pNext, null);
+  await waitLine(/^cleared shown/, 20000, pBoss);
+  await sleep(250);
+  await shot('P10_cleared_band');
+  const pub = await waitLine(/^map unlock library begin/, 20000, pBoss);
+  await sleep(950);
+  await shot('P04_map_unlock_moment');
+  await waitLine(/^map unlock library done/, 20000, pub.index);
+  await sleep(300);
+  await shot('P04b_map_region2_open');
+  await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
+
+  results.fps = consoleLines.filter((l) => /^fps/.test(l.line)).map((l) => l.line);
+  results.checks = checks;
+  log('checks', JSON.stringify(checks));
+}
+
 let exitCode = 0;
 try {
   await connect();
@@ -698,6 +1036,10 @@ try {
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
   if (args.scenario === 'title') {
     await runTitle();
+    throw { done: true };
+  }
+  if (args.scenario === '5b1') {
+    await run5b1();
     throw { done: true };
   }
   if (args.scenario === '4b') {
@@ -831,6 +1173,7 @@ try {
   try { ws?.close(); } catch { }
   await sleep(500);
   try { chrome.kill(); } catch { }
+  try { if (server) { server.closeAllConnections?.(); await new Promise((r) => server.close(r)); } } catch { }
   try { rmSync(profile, { recursive: true, force: true }); } catch { }
   log('done', exitCode === 0 ? 'OK' : 'FAILED');
   process.exit(exitCode);

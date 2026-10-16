@@ -1,6 +1,7 @@
 using Edgewise.Core;
 using Edgewise.Game.App;
 using Edgewise.Game.Audio;
+using Edgewise.Game.Campaign;
 using Edgewise.Game.Juice;
 using Edgewise.Game.Controls;
 using Edgewise.Game.Match;
@@ -88,6 +89,13 @@ namespace Edgewise.EditorTools
             fanGo.SetActive(false);
             var dexRoot = new GameObject("DexCards");
             dexRoot.transform.SetParent(game.transform, false);
+            // 星図巡りのカードを受け取る演出の舞台（導入・報酬・取られる。5b-1）
+            var stageGo = new GameObject("CampaignCards");
+            stageGo.transform.SetParent(game.transform, false);
+            var stage = stageGo.AddComponent<WorldCardStage>();
+            stage.Wire(assets, layout);
+            stageGo.SetActive(false);
+            var campaign = game.AddComponent<CampaignController>();
 
             // ---- UI ----
             var canvasGo = new GameObject("Canvas", typeof(RectTransform));
@@ -118,6 +126,19 @@ namespace Edgewise.EditorTools
             dex.Build(assets, layout, dexRoot.transform);
             var credits = MakeScreen<CreditsScreen>("Credits", canvasGo.transform);
             credits.Build(assets);
+            // 星図巡り（5b-1）: 星図・星域・デッキ編集・報酬・会話・巡り終えた帯（会話と帯は他の画面の上）
+            var map = MakeScreen<StarMapScreen>("StarMap", canvasGo.transform);
+            map.Build(assets);
+            var region = MakeScreen<RegionScreen>("Region", canvasGo.transform);
+            region.Build(assets);
+            var deck = MakeScreen<DeckEditScreen>("DeckEdit", canvasGo.transform);
+            deck.Build(assets);
+            var reward = MakeScreen<RewardScreen>("Reward", canvasGo.transform);
+            reward.Build(assets, stage);
+            var dialogue = MakeScreen<DialogueBox>("Dialogue", canvasGo.transform);
+            dialogue.Build(assets);
+            var cleared = MakeScreen<ClearedBand>("Cleared", canvasGo.transform);
+            cleared.Build(assets);
             var settings = MakeScreen<SettingsPanel>("Settings", canvasGo.transform);
             settings.Build(assets);
             settings.gameObject.SetActive(false);
@@ -132,10 +153,12 @@ namespace Edgewise.EditorTools
             module.AssignDefaultActions();
 
             match.Wire(assets, board, hand0, hand1, hud, banner, layout, player, cards, juiceFx);
-            flow.Wire(assets, table, title, setup, hud, menu, result, banner, match, fps, settings, bgm, dex, credits, fan);
+            flow.Wire(assets, table, title, setup, hud, menu, result, banner, match, fps, settings, bgm, dex, credits, fan, campaign);
+            campaign.Wire(flow, map, region, deck, dialogue, reward, cleared);
             table.SetActive(false);
 
-            foreach (var c in new Component[] { layout, match, flow, board, hud, title, setup, result, menu, banner, settings, sfx, juiceFx, bgm, dex, credits, fan })
+            foreach (var c in new Component[] { layout, match, flow, board, hud, title, setup, result, menu, banner, settings, sfx, juiceFx, bgm, dex, credits, fan,
+                         campaign, stage, map, region, deck, reward, dialogue, cleared })
                 EditorUtility.SetDirty(c);
             EditorSceneManager.MarkSceneDirty(scene);
             // 保存前の内容（中身が同じなら書き戻さず、git の差分を出さない）

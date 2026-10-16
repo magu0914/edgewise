@@ -23,9 +23,21 @@ namespace Edgewise.Game.UI
         [SerializeField] TextMeshProUGUI note;
         [SerializeField] Button againButton;
         [SerializeField] Button settingsButton;
+        [SerializeField] Button nextButton;
 
         public event Action AgainPressed;
         public event Action SettingsPressed;
+
+        /// <summary>星図巡りの「次へ」。</summary>
+        public event Action NextPressed;
+
+        public Button NextButton => nextButton;
+
+        /// <summary>星図巡りの結果画面（「もう一度」「設定を変える」の代わりに「次へ」だけ）。</summary>
+        public bool CampaignMode { get; set; }
+
+        /// <summary>「次へ」が押せる状態か（テスト用）。</summary>
+        public bool NextReady => nextButton != null && nextButton.gameObject.activeSelf;
 
         public bool IsShown => gameObject.activeSelf;
         public string ResultLabel => resultText != null ? resultText.text : "";
@@ -48,6 +60,7 @@ namespace Edgewise.Game.UI
             note = UiKit.Label(panel.transform, "Note", a, "", 22, Theme.InkDim);
             againButton = UiKit.Button(panel.transform, "AgainButton", a, UiText.Again, 28, out _, new Color(0.25f, 0.42f, 0.40f));
             settingsButton = UiKit.Button(panel.transform, "SettingsButton", a, UiText.ChangeSettings, 24, out _);
+            nextButton = UiKit.Button(panel.transform, "NextButton", a, UiText.ResultNext, 28, out _, new Color(0.25f, 0.42f, 0.40f));
             ApplyLayout(false);
         }
 
@@ -55,6 +68,7 @@ namespace Edgewise.Game.UI
         {
             againButton.onClick.AddListener(() => AgainPressed?.Invoke());
             settingsButton.onClick.AddListener(() => SettingsPressed?.Invoke());
+            nextButton.onClick.AddListener(() => NextPressed?.Invoke());
         }
 
         public void ApplyLayout(bool portrait)
@@ -71,11 +85,13 @@ namespace Edgewise.Game.UI
             {
                 UiKit.Place((RectTransform)againButton.transform, c, new Vector2(0f, -110f), new Vector2(360f, 84f));
                 UiKit.Place((RectTransform)settingsButton.transform, c, new Vector2(0f, -210f), new Vector2(360f, 70f));
+                UiKit.Place((RectTransform)nextButton.transform, c, new Vector2(0f, -150f), new Vector2(360f, 90f));
             }
             else
             {
                 UiKit.Place((RectTransform)againButton.transform, c, new Vector2(-135f, -170f), new Vector2(250f, 76f));
                 UiKit.Place((RectTransform)settingsButton.transform, c, new Vector2(135f, -170f), new Vector2(250f, 76f));
+                UiKit.Place((RectTransform)nextButton.transform, c, new Vector2(0f, -170f), new Vector2(280f, 76f));
             }
         }
 
@@ -90,6 +106,7 @@ namespace Edgewise.Game.UI
             note.text = resigned ? UiText.Resigned : "";
             againButton.gameObject.SetActive(false);
             settingsButton.gameObject.SetActive(false);
+            nextButton.gameObject.SetActive(false);
             EventSystem.current?.SetSelectedGameObject(null);
 
             // スコアのカウントアップ
@@ -111,10 +128,19 @@ namespace Edgewise.Game.UI
             var rt = resultText.rectTransform;
             await Tweens.Run(juice.resultTextTime * timeFactor, k => rt.localScale = Vector3.one * Mathf.LerpUnclamped(0.3f, 1f, k), ct,
                 Ease.OutBack);
+            if (CampaignMode)
+            {
+                nextButton.gameObject.SetActive(true);
+                EventSystem.current?.SetSelectedGameObject(nextButton.gameObject);
+                return;
+            }
             againButton.gameObject.SetActive(true);
             settingsButton.gameObject.SetActive(true);
             EventSystem.current?.SetSelectedGameObject(againButton.gameObject);
         }
+
+        /// <summary>結果の下の小さな文字（降参・完勝など）。</summary>
+        public void SetNote(string text) => note.text = text ?? "";
 
         public void Hide() => gameObject.SetActive(false);
     }

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
+using Edgewise.Core.Campaign;
 using Edgewise.Core.Data;
 using Edgewise.Game.UI;
 using Edgewise.Game.View;
@@ -179,6 +180,17 @@ namespace Edgewise.EditorTools
             }
             foreach (var card in CardCatalog.All)
                 foreach (char c in card.Name) set.Add(c);
+            // 星図巡り（5b-1）: 星域名・相手の名前と肩書き・強さの表示名・台詞（Core のデータから集める）
+            foreach (var region in CampaignData.Regions)
+            {
+                foreach (char c in region.Name) set.Add(c);
+                foreach (var o in region.Opponents)
+                {
+                    foreach (char c in o.Name + o.Title + o.StrengthLabel) set.Add(c);
+                    foreach (var line in o.Lines.AllLines())
+                        foreach (char c in line) set.Add(c);
+                }
+            }
             foreach (char c in Theme.MarkP0 + Theme.MarkP1 + "★☆−") set.Add(c);
             set.Remove('\n');
             set.Remove('\r');
@@ -191,15 +203,16 @@ namespace Edgewise.EditorTools
             if (font == null) throw new FileNotFoundException("Noto Sans JP not found. Put the Google Fonts OFL version at " + SourceFont);
 
             string chars = Charset();
-            string hash = Hash(chars + "|v4");
+            string hash = Hash(chars + "|v5");
             var existing = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FontAssetPath);
             bool upToDate = existing != null && File.Exists(CharsetPath) && File.ReadAllText(CharsetPath).StartsWith(hash);
             TMP_FontAsset fa = existing;
             if (!upToDate)
             {
                 if (existing != null) AssetDatabase.DeleteAsset(FontAssetPath);
-                // まず 1024×1024（40pt で焼く）。入りきらなければ大きくする
+                // まず 1024×1024（40pt で焼く）。入りきらなければ同じ 40pt のまま横に倍、それでも足りなければ大きくする
                 fa = Create(font, chars, 1024, 1024, 40, 5);
+                if (fa == null) fa = Create(font, chars, 2048, 1024, 40, 5);
                 if (fa == null) fa = Create(font, chars, 2048, 1024, 56, 6);
                 if (fa == null) fa = Create(font, chars, 2048, 2048, 56, 6);
                 if (fa == null) throw new Exception("could not pack the font atlas");
@@ -218,14 +231,27 @@ namespace Edgewise.EditorTools
             var fa = TMP_FontAsset.CreateFontAsset(font, pointSize, padding, GlyphRenderMode.SDFAA, w, h, AtlasPopulationMode.Dynamic, false);
             fa.name = Path.GetFileNameWithoutExtension(FontAssetPath);
             fa.TryAddCharacters(chars, out string missing);
-            int expected = chars.Length - (missing?.Length ?? 0);
-            if (fa.characterTable.Count < expected)
+            // TryAddCharacters は「フォントに無い文字」と「アトラスに入りきらなかった文字」を区別せずに返す。
+            // フォントに字形がある文字が 1 つでも漏れていたら、アトラスが小さすぎるとみなして大きいサイズでやり直す
+            var notInFont = new StringBuilder();
+            int overflow = 0;
+            if (!string.IsNullOrEmpty(missing))
             {
-                Debug.LogWarning("[Edgewise] atlas " + w + "x" + h + " too small: " + fa.characterTable.Count + "/" + expected);
+                FontEngine.LoadFontFace(font, pointSize);
+                foreach (char c in missing)
+                {
+                    if (FontEngine.TryGetGlyphIndex(c, out uint glyph) && glyph != 0) overflow++;
+                    else notInFont.Append(c);
+                }
+            }
+            int expected = chars.Length - notInFont.Length;
+            if (overflow > 0 || fa.characterTable.Count < expected)
+            {
+                Debug.LogWarning("[Edgewise] atlas " + w + "x" + h + " too small: " + fa.characterTable.Count + "/" + expected + " (" + overflow + " did not fit)");
                 UnityEngine.Object.DestroyImmediate(fa);
                 return null;
             }
-            if (!string.IsNullOrEmpty(missing)) Debug.LogWarning("[Edgewise] Characters not in Noto Sans JP: " + missing);
+            if (notInFont.Length > 0) Debug.LogWarning("[Edgewise] Characters not in Noto Sans JP: " + notInFont);
 
             AssetDatabase.CreateAsset(fa, FontAssetPath);
             var tex = fa.atlasTextures[0];

@@ -102,6 +102,12 @@ namespace Edgewise.Game.Audio
                 case SfxKind.Win:
                 case SfxKind.Lose:
                 case SfxKind.Draw: return juice.volResult;
+                case SfxKind.Talk: return juice.volTalk;
+                case SfxKind.RewardNew:
+                case SfxKind.RewardDup:
+                case SfxKind.Unlock: return juice.volReward;
+                case SfxKind.Whoosh:
+                case SfxKind.Take: return juice.volPlace;
                 default: return juice.volButton;
             }
         }

@@ -53,9 +53,10 @@ namespace Edgewise.Game.AI
         public int Frames { get; private set; }
 
         /// <summary>思考を始める。前の思考が残っていれば捨てる。</summary>
-        public void Begin(GameState state, Player me, AiProfile profile, long seed, IReadOnlyList<CardDef> cardPool)
+        public void Begin(GameState state, Player me, AiProfile profile, long seed, IReadOnlyList<CardDef> cardPool,
+            CardPoolModel poolModel = CardPoolModel.Distinct)
         {
-            _session = new SearchSession(state, me, profile, seed, cardPool, _workspace);
+            _session = new SearchSession(state, me, profile, seed, cardPool, _workspace, poolModel);
             _done = _session.IsFinished;
             _beginTicks = Stopwatch.GetTimestamp();
             _lastNodes = 0;

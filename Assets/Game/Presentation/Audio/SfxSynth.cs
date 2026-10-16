@@ -18,6 +18,25 @@ namespace Edgewise.Game.Audio
         Lose,
         Draw,
         Button,
+
+        // ---- 星図巡り（5b-1） ----
+        /// <summary>会話の文字送り（とても小さな音）。</summary>
+        Talk,
+
+        /// <summary>報酬: 初めて手に入れたカード（きらめく上りの分散和音）。</summary>
+        RewardNew,
+
+        /// <summary>報酬: 持っているカード（×2）・導入でめくるとき。</summary>
+        RewardDup,
+
+        /// <summary>カードが手持ちへ飛んでいく。</summary>
+        Whoosh,
+
+        /// <summary>星域の鍵が外れる（鐘のような音）。</summary>
+        Unlock,
+
+        /// <summary>原作モードでカードを取られる（短く、悲しく）。</summary>
+        Take,
     }
 
     /// <summary>
@@ -48,6 +67,12 @@ namespace Edgewise.Game.Audio
                 case SfxKind.Lose: return Lose();
                 case SfxKind.Draw: return Draw();
                 case SfxKind.Button: return Button();
+                case SfxKind.Talk: return Talk();
+                case SfxKind.RewardNew: return RewardNew();
+                case SfxKind.RewardDup: return RewardDup();
+                case SfxKind.Whoosh: return Whoosh();
+                case SfxKind.Unlock: return Unlock();
+                case SfxKind.Take: return Take();
                 default: return new float[1];
             }
         }
@@ -225,6 +250,65 @@ namespace Edgewise.Game.Audio
             AddTone(b, 523.25f, 0f, 0.002f, 0.02f, 1f, 0.3f);
             AddTone(b, 261.63f, 0f, 0.002f, 0.025f, 0.5f, 0f);
             return Finish(b, 0.32f);
+        }
+
+        static float[] Talk()
+        {
+            var b = Buffer(0.05f);
+            AddTone(b, 740f, 0f, 0.003f, 0.012f, 1f, 0.2f);
+            return Finish(b, 0.22f);
+        }
+
+        static float[] RewardNew()
+        {
+            // 上りの分散和音（C5 E5 G5 C6 E6）→ 最後に和音が鳴り残る。ノイズの「しゃらん」を薄く重ねる
+            var b = Buffer(1.3f);
+            float[] notes = { 523.25f, 659.25f, 783.99f, 1046.5f, 1318.5f };
+            for (int i = 0; i < notes.Length; i++)
+            {
+                AddTone(b, notes[i], i * 0.055f, 0.004f, 0.16f, 0.9f, 0.25f);
+                AddTone(b, notes[i] * 0.5f, i * 0.055f, 0.004f, 0.12f, 0.25f, 0.4f);
+            }
+            float chord = notes.Length * 0.055f;
+            foreach (var f in new[] { 783.99f, 1046.5f, 1318.5f }) AddTone(b, f, chord, 0.02f, 0.42f, 0.45f, 0.2f);
+            AddNoise(b, chord, 0.04f, 0.3f, 0.12f, 0.5f, 71u);
+            return Finish(b, 0.45f);
+        }
+
+        static float[] RewardDup()
+        {
+            var b = Buffer(0.55f);
+            AddTone(b, 659.25f, 0f, 0.004f, 0.12f, 0.9f, 0.3f);
+            AddTone(b, 880f, 0.08f, 0.004f, 0.22f, 0.8f, 0.3f);
+            return Finish(b, 0.38f);
+        }
+
+        static float[] Whoosh()
+        {
+            var b = Buffer(0.4f);
+            AddNoise(b, 0f, 0.12f, 0.09f, 1f, 0.06f, 53u);
+            AddSweep(b, 220f, 520f, 0.25f, 0f, 0.1f, 0.08f, 0.25f);
+            return Finish(b, 0.3f);
+        }
+
+        static float[] Unlock()
+        {
+            var b = Buffer(1.4f);
+            // 鐘: 基音と少しずれた倍音
+            AddTone(b, 587.33f, 0f, 0.003f, 0.5f, 0.9f, 0.1f);
+            AddTone(b, 587.33f * 2.01f, 0f, 0.003f, 0.25f, 0.3f, 0f);
+            AddTone(b, 880f, 0.09f, 0.003f, 0.55f, 0.8f, 0.1f);
+            AddTone(b, 293.66f, 0.09f, 0.01f, 0.5f, 0.4f, 0.3f);
+            return Finish(b, 0.42f);
+        }
+
+        static float[] Take()
+        {
+            var b = Buffer(0.8f);
+            AddTone(b, 392f, 0f, 0.01f, 0.18f, 0.8f, 0.3f);
+            AddTone(b, 311.13f, 0.18f, 0.01f, 0.32f, 0.8f, 0.3f);
+            AddSweep(b, 300f, 180f, 0.4f, 0.18f, 0.02f, 0.2f, 0.25f);
+            return Finish(b, 0.36f);
         }
 
         // ------------------------------------------------------------------

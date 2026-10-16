@@ -30,6 +30,7 @@ namespace Edgewise.Game.UI
         [SerializeField] Button rotateRight;
         [SerializeField] Button hintButton;
         [SerializeField] TextMeshProUGUI hintLabel;
+        [SerializeField] PortraitView opponentPortrait;
 
         readonly int[] _score = new int[2];
 
@@ -77,6 +78,9 @@ namespace Edgewise.Game.UI
             hintLabel.enableAutoSizing = true;
             hintLabel.fontSizeMin = 14;
             hintLabel.fontSizeMax = 22;
+            // 星図巡りの相手の小さな立ち絵（フリー対戦では出さない）
+            opponentPortrait = PortraitView.Create(root, "OpponentPortrait", a);
+            opponentPortrait.gameObject.SetActive(false);
             ApplyLayout(false);
         }
 
@@ -90,8 +94,11 @@ namespace Edgewise.Game.UI
             ShowHintButton(false);
         }
 
+        bool _portraitMode;
+
         public void ApplyLayout(bool portrait)
         {
+            _portraitMode = portrait;
             float h = portrait ? 92f : 74f;
             UiKit.Place(bar, new Vector2(0.5f, 1f), new Vector2(0f, 0f), new Vector2(0f, h));
             bar.anchorMin = new Vector2(0f, 1f);
@@ -103,6 +110,20 @@ namespace Edgewise.Game.UI
             UiKit.Place(block1, new Vector2(1f, 1f), new Vector2(portrait ? -16f : -150f, -4f), new Vector2(blockW, h - 4f));
             LayoutBlock(name0, score0, tokens0, blockW, h, false);
             LayoutBlock(name1, score1, tokens1, blockW, h, true);
+            if (opponentPortrait != null)
+            {
+                bool hasPortrait = opponentPortrait.gameObject.activeSelf;
+                if (portrait)
+                {
+                    // 縦: 右端に小さな立ち絵、相手の欄はその左
+                    UiKit.Place((RectTransform)opponentPortrait.transform, new Vector2(1f, 1f), new Vector2(-10f, -12f), new Vector2(54f, 54f));
+                    if (hasPortrait) UiKit.Place(block1, new Vector2(1f, 1f), new Vector2(-70f, -4f), new Vector2(blockW, h - 4f));
+                }
+                else
+                {
+                    UiKit.Place((RectTransform)opponentPortrait.transform, new Vector2(1f, 1f), new Vector2(-150f - blockW - 8f, -6f), new Vector2(62f, 62f));
+                }
+            }
 
             if (portrait)
             {
@@ -134,6 +155,17 @@ namespace Edgewise.Game.UI
             UiKit.Place(name.rectTransform, anchor, new Vector2(textX, -6f), new Vector2(w - scoreW - 6f, 30f));
             UiKit.Place(tokens.rectTransform, anchor, new Vector2(textX, -38f), new Vector2(w - scoreW - 6f, 24f));
         }
+
+        /// <summary>星図巡りの相手（上部に名前と小さな立ち絵）。null ならフリー対戦（立ち絵なし）。</summary>
+        public void SetOpponent(Edgewise.Core.Campaign.Opponent opponent)
+        {
+            if (opponentPortrait == null) return;
+            if (opponent == null) opponentPortrait.Hide();
+            else opponentPortrait.Show(opponent);
+            ApplyLayout(_portraitMode);
+        }
+
+        public bool OpponentPortraitShown => opponentPortrait != null && opponentPortrait.gameObject.activeSelf;
 
         public void SetNames(string p0, string p1)
         {

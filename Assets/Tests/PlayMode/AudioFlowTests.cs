@@ -329,9 +329,11 @@ namespace Edgewise.Tests.PlayMode
             _app.Title.SettingsButton.onClick.Invoke();
             Assert.That(panel.VolumeSlider(SettingsPanel.Volume.Bgm).value, Is.EqualTo(7f));
 
-            // 横・縦どちらの配置でも、操作部品がパネルの内側に収まり、重ならない
+            // 横・縦どちらの配置でも、操作部品がパネルの内側に収まり、重ならない（5b-1 でタブ「基本」「星図巡り」が増えた）
             foreach (bool portrait in new[] { false, true })
+            foreach (bool campaignTab in new[] { false, true })
             {
+                panel.ShowTab(campaignTab);
                 panel.ApplyLayout(portrait);
                 var panelRt = (RectTransform)panel.transform.Find("Panel");
                 var outer = panelRt.rect;
@@ -339,7 +341,8 @@ namespace Edgewise.Tests.PlayMode
                 Assert.That(outer.width, Is.LessThanOrEqualTo(refSize.x));
                 Assert.That(outer.height, Is.LessThanOrEqualTo(refSize.y));
                 var rects = panelRt.GetComponentsInChildren<Selectable>().Select(s => LocalRect(panelRt, (RectTransform)s.transform)).ToList();
-                Assert.That(rects.Count, Is.EqualTo(3 + 3 + 3 + 1), "speed ×3, sliders ×3, toggles ×3, close");
+                if (campaignTab) Assert.That(rects.Count, Is.EqualTo(2 + 2 + 1), "tabs ×2, classic mode and erase, close");
+                else Assert.That(rects.Count, Is.EqualTo(2 + 3 + 3 + 3 + 1), "tabs ×2, speed ×3, sliders ×3, toggles ×3, close");
                 foreach (var r in rects)
                 {
                     bool inside = r.xMin >= outer.xMin - 0.5f && r.xMax <= outer.xMax + 0.5f && r.yMin >= outer.yMin - 0.5f && r.yMax <= outer.yMax + 0.5f;
@@ -351,6 +354,7 @@ namespace Edgewise.Tests.PlayMode
                 // 縦画面では 360×640 で 0.5 倍になるので、つまみは 22px（基準 44）以上の高さにする
                 if (portrait) Assert.That(((RectTransform)bgmSlider.transform).rect.height, Is.GreaterThanOrEqualTo(44f));
             }
+            panel.ShowTab(false);
             panel.ApplyLayout(false);
             panel.Close();
         }

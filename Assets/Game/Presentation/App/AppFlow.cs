@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Threading;
 using Edgewise.Core;
 using Edgewise.Game.Audio;
+using Edgewise.Game.Campaign;
 using Edgewise.Game.Controls;
 using Edgewise.Game.Juice;
 using Edgewise.Game.Match;
@@ -16,8 +17,10 @@ namespace Edgewise.Game.App
 {
     /// <summary>
     /// 画面の流れ（DESIGN §8-1）: タイトル → 対戦設定 → 対戦 → 結果（→ 再戦 or 対戦設定へ）。シーンは Main.unity 1 つ。
-    /// URL のクエリ（WebGL）: ?log = 自動操作用のログ、?seed=N = 配牌と先攻を固定、?speed=x1|x2|instant、?slow=4 = 撮影用のスロー、
-    /// ?bench / ?debug = デバッグシーン（CPU 対 CPU の計測）へ。
+    /// 星図巡り（DESIGN §12、5b-1）はタイトルの「星図巡り」から CampaignController が受け持つ。
+    /// URL のクエリ（WebGL）: ?log = 自動操作用のログ、?seed=N = 配牌と先攻（星図巡りでは新しく始めるときの seed）を固定、
+    /// ?speed=x1|x2|instant、?slow=4 = 撮影用のスロー、?bench / ?debug = デバッグシーン（CPU 対 CPU の計測）へ、
+    /// ?grant=a,b,c = 撮影用: 星図巡りを新しく始めたときに手持ちへカードを足す（?log と一緒のときだけ）。
     /// </summary>
     public sealed class AppFlow : MonoBehaviour
     {
@@ -38,6 +41,7 @@ namespace Edgewise.Game.App
         [SerializeField] CardDex dex;
         [SerializeField] CreditsScreen credits;
         [SerializeField] TitleFan fan;
+        [SerializeField] CampaignController campaign;
 
         MatchSettings _settings;
         MatchSettings _last;
@@ -57,14 +61,22 @@ namespace Edgewise.Game.App
         public CardDex Dex => dex;
         public CreditsScreen Credits => credits;
         public TitleFan Fan => fan;
+        public CampaignController Campaign => campaign;
+        public GameAssets Assets => assets;
+        public GameObject Table => table;
+
+        /// <summary>URL の ?seed（0 なら指定なし）。</summary>
+        public long SeedOverride => _seedOverride;
         public MatchOutcome LastOutcome { get; private set; }
 
         /// <summary>結果画面のボタンが押せる状態になったか（テスト用）。</summary>
         public bool ResultReady { get; private set; }
 
         public void Wire(GameAssets a, GameObject tableRoot, TitleScreen t, SetupScreen s, HudView h, MenuPanel m, ResultScreen r, BannerView b,
-            MatchController mc, FpsMeter f, SettingsPanel sp, BgmPlayer music, CardDex cardDex, CreditsScreen creditsScreen, TitleFan titleFan)
+            MatchController mc, FpsMeter f, SettingsPanel sp, BgmPlayer music, CardDex cardDex, CreditsScreen creditsScreen, TitleFan titleFan,
+            CampaignController campaignController)
         {
+            campaign = campaignController;
             settings = sp;
             dex = cardDex;
             credits = creditsScreen;
@@ -86,6 +98,10 @@ namespace Edgewise.Game.App
         {
             ReadUrl();
             _settings = MatchSettings.Load();
+            campaign.Initialize(AutomationLog.Enabled ? Grants() : null);
+            title.CampaignPressed += campaign.Enter;
+            settings.Campaign = campaign;
+            settings.CampaignErased += () => title.SetProgress(campaign.TitleProgress);
             title.StartPressed += ShowSetup;
             title.SettingsPressed += OpenSettingsFromTitle;
             title.DexPressed += ShowDex;
@@ -138,7 +154,7 @@ namespace Edgewise.Game.App
             var kb = UnityEngine.InputSystem.Keyboard.current;
             if (kb != null && kb.escapeKey.wasPressedThisFrame)
             {
-                if (settings.IsOpen) settings.Close();
+                if (settings.IsOpen) settings.Back();
                 else if (menu.IsOpen) menu.Close();
             }
         }
@@ -191,8 +207,18 @@ namespace Edgewise.Game.App
             }
         }
 
-        void HideAll()
+        static string[] Grants()
         {
+            var g = Param("grant");
+            return string.IsNullOrEmpty(g) ? null : g.Split(',');
+        }
+
+        /// <summary>画面をすべて隠す（星図巡りの画面も）。</summary>
+        public void HideAll()
+        {
+            if (campaign != null) campaign.HideScreens();
+            // 盤と手札（対戦の後に星図巡りの画面へ移るときも残さない。対戦を始めるときは呼び出し側が表示し直す）
+            if (table != null) table.SetActive(false);
             title.Hide();
             setup.Hide();
             result.Hide();
@@ -213,6 +239,7 @@ namespace Edgewise.Game.App
             HideAll();
             table.SetActive(false);
             title.Show();
+            title.SetProgress(campaign != null ? campaign.TitleProgress : null);
             fan.Show();
             if (focus != null) EventSystem.current?.SetSelectedGameObject(focus.gameObject);
             PlayBgm(BgmCue.Title);
@@ -290,20 +317,35 @@ namespace Edgewise.Game.App
         /// 勝敗の文字が出た瞬間: 勝利・敗北・引き分けの BGM に切り替える（席 0 から見た勝敗）。
         /// その場面に曲が割り当てられていなければ、3b の合成音のジングル（効果音）を鳴らす。
         /// </summary>
-        void OnResultShown(GameResult resultForSeat0)
+        public void OnResultShown(GameResult resultForSeat0)
         {
             var cue = resultForSeat0 == GameResult.P0 ? BgmCue.Victory : resultForSeat0 == GameResult.P1 ? BgmCue.Defeat : BgmCue.Draw;
             if (!PlayBgm(cue)) match.Fx.OnEnd(resultForSeat0);
         }
 
         /// <summary>場面の BGM に切り替える。曲が割り当てられていれば true（未設定なら無音）。</summary>
-        bool PlayBgm(BgmCue cue)
+        public bool PlayBgm(BgmCue cue)
         {
             if (bgm == null) return false;
             bool changed = bgm.CurrentCue != cue;
             bool has = bgm.Play(cue);
             if (changed && AutomationLog.Enabled) AutomationLog.Write("bgm " + cue + (has ? "" : " silent"));
             return has;
+        }
+
+        /// <summary>星図巡りの対戦の画面にする（盤・HUD・対戦の BGM）。</summary>
+        public void BeginCampaignMatchView()
+        {
+            StopMatch();
+            HideAll();
+            table.SetActive(true);
+            hud.SetVisible(true);
+            EventSystem.current?.SetSelectedGameObject(null);
+            Controls.Blocked = false;
+            ResultReady = false;
+            LastOutcome = null;
+            AutomationLog.Buttons("Hud", hud.transform);
+            PlayBgm(BgmCue.Match);
         }
 
         /// <summary>カード図鑑を開く（タイトルから）。</summary>

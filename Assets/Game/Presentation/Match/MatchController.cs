@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Edgewise.Core;
+using Edgewise.Core.AI;
 using Edgewise.Core.Data;
 using Edgewise.Game.AI;
 using Edgewise.Game.Audio;
@@ -118,7 +119,10 @@ namespace Edgewise.Game.Match
         {
             if (State == null || !player.IsAwaitingMove || _hint.IsRunning) return false;
             ClearHint();
-            _hint.Begin(State, State.Turn, Juice.hintNodeBudget, 0x48494e54L + MovesPlayed);
+            var camp = Settings?.campaign;
+            // 星図巡り: 同じカードを両者が持ちうるので Shared。候補は相手の持ちカード（すべて見ていれば）か全カード
+            if (camp != null) _hint.Begin(State, State.Turn, Juice.hintNodeBudget, 0x48494e54L + MovesPlayed, camp.HintPool, CardPoolModel.Shared);
+            else _hint.Begin(State, State.Turn, Juice.hintNodeBudget, 0x48494e54L + MovesPlayed);
             hud.SetHintText(UiText.HintThinking);
             if (AutomationLog.Enabled) AutomationLog.Write("hint begin");
             return true;
@@ -168,12 +172,25 @@ namespace Edgewise.Game.Match
             MovesPlayed = 0;
             try
             {
-                long seed = settings.seed != 0 ? settings.seed : (DateTime.Now.Ticks & 0x7fffffffL) | 1L;
-                var rules = settings.ToRuleSet();
-                var (d0, d1) = Dealer.Deal(settings.band, settings.random, seed);
-                // Pivot のトークンは先攻・後攻で非対称（Phase 3c の自己対戦で決めた値。docs/BALANCE.md）
-                var tokens = GameConstants.MatchPivotTokens(rules);
-                State = GameEngine.CreateGame(new GameConfig(rules, d0, d1, seed, CardCatalog.ById, tokens.First, tokens.Second));
+                long seed;
+                RuleSet rules;
+                if (settings.campaign != null)
+                {
+                    // 星図巡り: 星域のルール・両者のデッキ・seed は CampaignRules.MatchConfig が決める
+                    var cfg = settings.campaign.Config;
+                    seed = cfg.Seed;
+                    rules = cfg.Rules;
+                    State = GameEngine.CreateGame(cfg);
+                }
+                else
+                {
+                    seed = settings.seed != 0 ? settings.seed : (DateTime.Now.Ticks & 0x7fffffffL) | 1L;
+                    rules = settings.ToRuleSet();
+                    var (d0, d1) = Dealer.Deal(settings.band, settings.random, seed);
+                    // Pivot のトークンは先攻・後攻で非対称（Phase 3c の自己対戦で決めた値。docs/BALANCE.md）
+                    var tokens = GameConstants.MatchPivotTokens(rules);
+                    State = GameEngine.CreateGame(new GameConfig(rules, d0, d1, seed, CardCatalog.ById, tokens.First, tokens.Second));
+                }
                 _rng = Rng.SeedToState(seed ^ 0x2545F491L);
                 _tokensMax0 = State.GetPivotTokens(Player.P0);
                 _tokensMax1 = State.GetPivotTokens(Player.P1);
@@ -256,7 +273,10 @@ namespace Edgewise.Game.Match
             try
             {
                 long seed = Rng.NextUInt32(_rng, out _rng);
-                _ai.Begin(State, State.Turn, Settings.ProfileFor(State.Turn), seed, CardCatalog.All);
+                // 星図巡りの相手は性格つきの AI。同じカードを両者が持ちうるので決定化は Shared（候補は全カード。DESIGN §12-6）
+                if (Settings.campaign != null && State.Turn == Player.P1)
+                    _ai.Begin(State, State.Turn, Settings.campaign.Profile, seed, CardCatalog.All, CardPoolModel.Shared);
+                else _ai.Begin(State, State.Turn, Settings.ProfileFor(State.Turn), seed, CardCatalog.All);
                 float start = Time.unscaledTime;
                 float min = Juice.cpuMinThink * Tf;
                 // 考えている間、手札の 1 枚がふわっと浮いたり戻ったりする（1 回ごとに別のカードへ）
@@ -394,7 +414,9 @@ namespace Edgewise.Game.Match
                         (i + p * 2) * Juice.dealStagger * tf, c, "move"));
                 }
             }
-            hud.SetNames(Settings.seat0 == SeatKind.Human ? UiText.You : UiText.Cpu, UiText.Cpu);
+            var opp = Settings.campaign?.Opponent;
+            hud.SetNames(Settings.seat0 == SeatKind.Human ? UiText.You : UiText.Cpu, opp != null ? opp.Name : UiText.Cpu);
+            hud.SetOpponent(opp);
             SyncScores();
             UpdateHud();
             await Tweens.AwaitAll(tweens, ct);
