@@ -10,6 +10,7 @@ namespace Edgewise.Game.UI
     /// <summary>タイトル画面: ロゴ（仮題）と「はじめる」「設定」「カード図鑑」「クレジット」。背景の星空は常に動き、ロゴの背後で扇のカードが回る（TitleFan）。</summary>
     public sealed class TitleScreen : MonoBehaviour, IResponsiveUi
     {
+        [SerializeField] RawImage halo;
         [SerializeField] TextMeshProUGUI logo;
         [SerializeField] TextMeshProUGUI subtitle;
         [SerializeField] Button startButton;
@@ -34,6 +35,10 @@ namespace Edgewise.Game.UI
             var root = (RectTransform)transform;
             UiKit.Stretch(root);
             for (int i = root.childCount - 1; i >= 0; i--) DestroyImmediate(root.GetChild(i).gameObject);
+            // ロゴと副題の背後の柔らかい暗い光（扇のカードの上に敷いて、文字のコントラストを保つ）。模様のテクスチャは実行時に作る
+            halo = UiKit.Rect(root, "Halo").gameObject.AddComponent<RawImage>();
+            halo.color = new Color(0.012f, 0.016f, 0.045f, 0.82f);
+            halo.raycastTarget = false;
             logo = UiKit.Label(root, "Logo", a, UiText.Logo, 128, Theme.Gold, TextAlignmentOptions.Center, true);
             logo.fontStyle = FontStyles.Bold;
             logo.characterSpacing = 18f;
@@ -50,6 +55,7 @@ namespace Edgewise.Game.UI
 
         void Awake()
         {
+            if (halo != null) halo.texture = SoftEllipse(128, 64);
             startButton.onClick.AddListener(() => StartPressed?.Invoke());
             settingsButton.onClick.AddListener(() => SettingsPressed?.Invoke());
             dexButton.onClick.AddListener(() => DexPressed?.Invoke());
@@ -59,6 +65,7 @@ namespace Edgewise.Game.UI
         public void ApplyLayout(bool portrait)
         {
             var c = new Vector2(0.5f, 0.5f);
+            if (halo != null) UiKit.Place(halo.rectTransform, c, new Vector2(0f, portrait ? 170f : 72f), portrait ? new Vector2(760f, 360f) : new Vector2(1240f, 360f));
             UiKit.Place(logo.rectTransform, c, new Vector2(0f, portrait ? 220f : 120f), new Vector2(1200f, 180f));
             logo.fontSize = portrait ? 92 : 128;
             logo.characterSpacing = portrait ? 8f : 18f;
@@ -84,5 +91,25 @@ namespace Edgewise.Game.UI
         }
 
         public void Hide() => gameObject.SetActive(false);
+
+        /// <summary>中心が濃く、楕円の縁へなめらかに消える白いテクスチャ（色は RawImage.color で付ける）。</summary>
+        static Texture2D SoftEllipse(int w, int h)
+        {
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, name = "TitleHalo" };
+            var px = new Color32[w * h];
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    float dx = (x + 0.5f) / w * 2f - 1f, dy = (y + 0.5f) / h * 2f - 1f;
+                    float r = Mathf.Sqrt(dx * dx + dy * dy);
+                    float v = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.35f, 1f, r));
+                    px[y * w + x] = new Color32(255, 255, 255, (byte)Mathf.RoundToInt(v * 255f));
+                }
+            }
+            tex.SetPixels32(px);
+            tex.Apply(false, true);
+            return tex;
+        }
     }
 }

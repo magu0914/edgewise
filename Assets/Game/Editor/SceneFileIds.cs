@@ -10,7 +10,7 @@ namespace Edgewise.EditorTools
     /// <summary>
     /// シーンファイル（YAML）の fileID を決定論的に付け直す。
     /// Unity は新しく作ったオブジェクトに乱数の fileID を付けるので、SceneBuilder でシーンを作り直すたびに中身が同じでも
-    /// 全行が変わってしまう。ここで「階層のパス（親のパス/名前[兄弟の順番]）＋コンポーネントの型と順番」から ID を作り直し、
+    /// 全行が変わってしまう。ここで「階層のパス（親のパス/名前[同じ名前の兄弟の中での順番]）＋コンポーネントの型と順番」から ID を作り直し、
     /// ドキュメントを ID の順に並べ替える。中身が同じなら毎回同じバイト列になり、git の差分が出ない。
     /// 設定のドキュメント（OcclusionCullingSettings など、ID が小さい固定値）と SceneRoots（long.MaxValue）はそのまま。
     /// </summary>
@@ -115,12 +115,18 @@ namespace Edgewise.EditorTools
                 if (transformOf.TryGetValue(go, out long tr))
                 {
                     var t = byId[tr];
+                    // 兄弟の中での順番は「同じ名前の兄弟の中で何番目か」にする（別の名前の子を足しても、ほかの ID が変わらない）
+                    List<long> siblings = roots;
                     if (t.Father != 0 && byId.TryGetValue(t.Father, out var father))
                     {
                         parentKey = KeyOfGo(father.GameObject);
-                        sibling = father.Children.IndexOf(tr);
+                        siblings = father.Children;
                     }
-                    else sibling = roots.IndexOf(tr);
+                    foreach (var s in siblings)
+                    {
+                        if (s == tr) break;
+                        if (byId.TryGetValue(s, out var st) && byId.TryGetValue(st.GameObject, out var sg) && sg.Name == g.Name) sibling++;
+                    }
                 }
                 k = parentKey + "/" + g.Name + "[" + sibling + "]";
                 goKey[go] = k;

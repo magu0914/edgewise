@@ -161,6 +161,21 @@ namespace Edgewise.Tests.EditMode
             Assert.That(na, Does.Contain("m_GameObject: {fileID: " + goId + "}"));
         }
 
+        [Test]
+        public void AddingADifferentlyNamedSiblingKeepsTheOtherIds()
+        {
+            string a = SceneFileIds.NormalizeText(Scene(111111111, 222222222, 333333333, 444444444));
+            // Root の子の先頭に "Halo" を足す
+            string withHalo = Scene(111111111, 222222222, 333333333, 444444444)
+                .Replace("  m_Children:\n  - {fileID: 444444444}", "  m_Children:\n  - {fileID: 666666666}\n  - {fileID: 444444444}")
+                .Replace("--- !u!1660057539", "--- !u!1 &555555555\nGameObject:\n  m_Component:\n  - component: {fileID: 666666666}\n  m_Layer: 0\n  m_Name: Halo\n"
+                    + "--- !u!4 &666666666\nTransform:\n  m_GameObject: {fileID: 555555555}\n  m_Children: []\n  m_Father: {fileID: 222222222}\n--- !u!1660057539");
+            string b = SceneFileIds.NormalizeText(withHalo);
+            var idsA = System.Text.RegularExpressions.Regex.Matches(a, @"^--- !u!\d+ &(\d+)", System.Text.RegularExpressions.RegexOptions.Multiline)
+                .Cast<System.Text.RegularExpressions.Match>().Select(m => m.Groups[1].Value).ToList();
+            foreach (var id in idsA) Assert.That(b, Does.Contain("&" + id), "existing id kept: " + id);
+        }
+
         static string Scene(long rootGo, long rootTr, long childGo, long childTr) =>
             "%YAML 1.1\n%TAG !u! tag:unity3d.com,2011:\n"
             + "--- !u!29 &1\nOcclusionCullingSettings:\n  m_ObjectHideFlags: 0\n"

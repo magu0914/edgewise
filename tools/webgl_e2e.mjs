@@ -670,6 +670,24 @@ function lastIndex(re) {
   return 0;
 }
 
+// タイトルの構図の確認（4b 追加）: 横と縦で、扇の角度が違う 2 時点を撮る
+//   node tools/webgl_e2e.mjs --scenario title --url http://127.0.0.1:8771/ --out Logs/shots/4b
+async function runTitle() {
+  await send('Page.navigate', { url: `${BASE}?log&seed=${SEED}` });
+  const tAt = (await waitLine(/^screen Title/, 120000)).index;
+  await move(5, 5);
+  await sleep(3000);
+  await shot('01_title_fan_v2');
+  await sleep(6000);
+  await shot('01_title_fan_v2_later');
+  await send('Emulation.setDeviceMetricsOverride', { width: 360, height: 640, deviceScaleFactor: 1, mobile: false });
+  await waitLine(/^screen Portrait/, 10000, tAt);
+  await sleep(1500);
+  await shot('01_title_fan_v2_portrait');
+  await sleep(6000);
+  await shot('01_title_fan_v2_portrait_later');
+}
+
 let exitCode = 0;
 try {
   await connect();
@@ -678,6 +696,10 @@ try {
   await send('Runtime.enable');
   await send('Page.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
+  if (args.scenario === 'title') {
+    await runTitle();
+    throw { done: true };
+  }
   if (args.scenario === '4b') {
     await run4b();
     throw { done: true };
