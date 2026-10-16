@@ -372,11 +372,27 @@ namespace Edgewise.Core.Campaign
             }
         }
 
-        /// <summary>対戦の設定（星域のルール、ゲーム本体の Pivot トークン数）。プレイヤーは P0、相手は P1。</summary>
-        public static GameConfig MatchConfig(Region region, IReadOnlyList<string> playerDeck, IReadOnlyList<string> opponentDeck, long seed)
+        /// <summary>
+        /// その相手との対戦のルール: 星域の固定ルール。主との対戦だけは Sudden Death を足す（「主とは決着がつくまで戦う」。DESIGN §12-2）。
+        /// </summary>
+        public static RuleSet MatchRules(Opponent opponent)
         {
-            var tokens = GameConstants.MatchPivotTokens(region.Rules);
-            return new GameConfig(region.Rules, playerDeck, opponentDeck, seed, CardCatalog.ById, tokens.First, tokens.Second);
+            var region = CampaignData.RegionOf(opponent ?? throw new ArgumentNullException(nameof(opponent)))
+                ?? throw new ArgumentException("unknown region: " + opponent.RegionId, nameof(opponent));
+            var r = region.Rules;
+            if (!opponent.IsBoss || r.SuddenDeath) return r;
+            return new RuleSet(r.Open, r.Random, r.Same, r.SameWall, r.Plus, r.Combo, r.Elemental, true, r.Pivot, r.Resonance, r.Traits);
+        }
+
+        /// <summary>
+        /// 対戦の設定（MatchRules のルール、ゲーム本体の Pivot トークン数 GameConstants.MatchPivotTokens）。プレイヤーは P0、相手は P1。
+        /// 主の対戦は Sudden Death が入るので、Pivot ON ならトークンは 1/1 になる。
+        /// </summary>
+        public static GameConfig MatchConfig(Opponent opponent, IReadOnlyList<string> playerDeck, IReadOnlyList<string> opponentDeck, long seed)
+        {
+            var rules = MatchRules(opponent);
+            var tokens = GameConstants.MatchPivotTokens(rules);
+            return new GameConfig(rules, playerDeck, opponentDeck, seed, CardCatalog.ById, tokens.First, tokens.Second);
         }
 
         // ------------------------------------------------------------------

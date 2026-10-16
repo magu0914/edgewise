@@ -35,14 +35,33 @@ namespace Edgewise.Sim
             (70, 80, 55, 65), (65, 75, 50, 60), (55, 65, 45, 55), (50, 60, 35, 45),
         };
 
-        /// <summary>DESIGN §12-9 の追加目標（全対戦に対する勝ち・負けの割合、%）。星域 1・2 だけ。</summary>
-        public static (int MinWin, int MaxLoss)? AllGamesTarget(Opponent o)
+        /// <summary>
+        /// DESIGN §12-9 の全対戦に対する目標（%）: 星域 1・2 の通常の相手は「勝ち ≥ MinWin・負け ≤ MaxLoss」、
+        /// 主（Sudden Death 込み）は「勝ち MinWin〜MaxWin」。それ以外は null。
+        /// </summary>
+        public static (int MinWin, int MaxWin, int MaxLoss)? AllGamesTarget(Opponent o)
         {
             int n = CampaignData.RegionOf(o).Number;
-            if (n == 1) return o.IsBoss ? (35, 30) : (55, 15);
-            if (n == 2) return o.IsBoss ? (30, 35) : (45, 25);
+            if (o.IsBoss)
+            {
+                switch (n)
+                {
+                    case 1: return (55, 70, 100);
+                    case 2: return (50, 65, 100);
+                    case 3: return (45, 55, 100);
+                    default: return (35, 45, 100);
+                }
+            }
+            if (n == 1) return (55, 100, 15);
+            if (n == 2) return (45, 100, 25);
             return null;
         }
+
+        static string TargetText((int MinWin, int MaxWin, int MaxLoss) t) =>
+            t.MaxWin < 100 ? "勝ち " + t.MinWin + "〜" + t.MaxWin + "%" : "勝ち ≥" + t.MinWin + "%・負け ≤" + t.MaxLoss + "%";
+
+        static bool MeetsAllGames((int MinWin, int MaxWin, int MaxLoss) t, Row r) =>
+            100 * r.Wins >= t.MinWin * r.Games && 100 * r.Wins <= t.MaxWin * r.Games && 100 * r.Losses <= t.MaxLoss * r.Games;
 
         public static (int Lo, int Hi) Target(Opponent o)
         {
@@ -166,7 +185,8 @@ namespace Edgewise.Sim
                 Console.Error.WriteLine(o.Id.PadRight(24) + " " + row.Wins + "-" + row.Losses + "-" + row.Draws + "  win "
                     + Pct(row.Wins, row.Wins + row.Losses) + " (target " + lo + "-" + hi + ")  all W/D/L " + Pct(row.Wins, row.Games) + " / "
                     + Pct(row.Draws, row.Games) + " / " + Pct(row.Losses, row.Games)
-                    + (all3.HasValue ? " (target W>=" + all3.Value.MinWin + " L<=" + all3.Value.MaxLoss + ")" : "")
+                    + (all3.HasValue ? " (target " + TargetText(all3.Value) + (MeetsAllGames(all3.Value, row) ? " ok" : " NG") + ")" : "")
+                    + (RulesFor(o).SuddenDeath ? "  SD rounds " + ((double)row.SuddenDeathRounds / Math.Max(1, row.Games)).ToString("0.00", Inv) : "")
                     + "  " + row.Seconds.ToString("0.0", Inv) + " s");
             }
 
@@ -183,9 +203,11 @@ namespace Edgewise.Sim
         /// <summary>計測専用（--sudden-death-regions）: ルール変更の提案の効果を測るため、指定した星域に Sudden Death を足す。</summary>
         static HashSet<int> _sdRegions = new HashSet<int>();
 
-        static RuleSet RulesFor(Region region)
+        /// <summary>対戦のルール: ゲームと同じ CampaignRules.MatchRules（主戦は Sudden Death つき）＋計測専用の --sudden-death-regions。</summary>
+        static RuleSet RulesFor(Opponent o)
         {
-            var r = region.Rules;
+            var region = CampaignData.RegionOf(o);
+            var r = CampaignRules.MatchRules(o);
             if (!_sdRegions.Contains(region.Number) || r.SuddenDeath) return r;
             return new RuleSet(r.Open, r.Random, r.Same, r.SameWall, r.Plus, r.Combo, r.Elemental, true, r.Pivot);
         }
@@ -194,7 +216,7 @@ namespace Edgewise.Sim
         {
             var region = CampaignData.RegionOf(o);
             var col = StandardCollection(all, o, picks);
-            var rules = RulesFor(region);
+            var rules = RulesFor(o);
             var playerDeck = CampaignRules.AutoDeck(col, rules, region.DeckLevelCap)
                 ?? throw new InvalidOperationException("cannot build a deck for " + o.Id);
             var playerPool = o.Cards.Select(id => CardCatalog.ById[id]).ToList(); // 相手の持ちカード（公開情報）
@@ -265,6 +287,10 @@ namespace Edgewise.Sim
             return total;
         }
 
+        /// <summary>Sudden Death のある対戦なら、1 局あたりの再戦の回数の平均（ない対戦は "—"）。</summary>
+        static string SdRounds(Row r) => !RulesFor(r.Opponent).SuddenDeath ? "—"
+            : ((double)r.SuddenDeathRounds / Math.Max(1, r.Games)).ToString("0.00", Inv);
+
         static string Pct(long k, long n) => n == 0 ? "-" : (100.0 * k / n).ToString("0.0", Inv) + "%";
 
         static string PctCi(long k, long n)
@@ -280,8 +306,8 @@ namespace Edgewise.Sim
             sb.AppendLine();
             sb.AppendLine("#### 星域・相手ごとの勝率（プレイヤー役から見た値。勝率は引き分けを除く。[ ] は Wilson 95% 信頼区間）");
             sb.AppendLine();
-            sb.AppendLine("| 星域 | 相手 | AI / 性格 | 相手デッキ Lv（上限） | プレイヤーのデッキ（手持ち種類） | 勝-敗-分 | 勝率 | 目標 | 判定 | 勝ち / 引き分け / 負け（全対戦比） | 全対戦の目標 | 判定 | 完勝 |");
-            sb.AppendLine("|---|---|---|---:|---|---:|---:|---:|:---:|---:|---:|:---:|---:|");
+            sb.AppendLine("| 星域 | 相手 | AI / 性格 | 相手デッキ Lv（上限） | プレイヤーのデッキ（手持ち種類） | 勝-敗-分 | 勝率 | 目標 | 判定 | 勝ち / 引き分け / 負け（全対戦比） | 全対戦の目標 | 判定 | SD 平均ラウンド | 完勝 |");
+            sb.AppendLine("|---|---|---|---:|---|---:|---:|---:|:---:|---:|---:|:---:|---:|---:|");
             foreach (var r in rows)
             {
                 var o = r.Opponent;
@@ -292,9 +318,8 @@ namespace Edgewise.Sim
                 string verdict = rate >= lo && rate <= hi ? "○" : "✕";
                 string deck = string.Join(" ", r.PlayerDeck.Select(id => id + "(" + CardCatalog.ById[id].Level + ")"));
                 var all3 = AllGamesTarget(o);
-                string allTarget = all3.HasValue ? "勝ち ≥" + all3.Value.MinWin + "%・負け ≤" + all3.Value.MaxLoss + "%" : "—";
-                string allVerdict = !all3.HasValue ? "—"
-                    : 100 * r.Wins >= all3.Value.MinWin * r.Games && 100 * r.Losses <= all3.Value.MaxLoss * r.Games ? "○" : "✕";
+                string allTarget = all3.HasValue ? TargetText(all3.Value) : "—";
+                string allVerdict = !all3.HasValue ? "—" : MeetsAllGames(all3.Value, r) ? "○" : "✕";
                 sb.AppendLine("| " + region.Number + ". " + region.Name + " | " + (o.IsBoss ? "**主** " : "") + o.Title + " " + o.Name
                     + " | " + o.Profile.Name + " / " + o.PersonalityLabel
                     + " | " + ((double)r.OppDeckLevels / Math.Max(1, r.OppDecks)).ToString("0.0", Inv) + "（" + o.DeckLevelCap + "）"
@@ -302,7 +327,7 @@ namespace Edgewise.Sim
                     + " | " + r.Wins + "-" + r.Losses + "-" + r.Draws
                     + " | " + PctCi(r.Wins, decisive) + " | " + lo + "〜" + hi + "% | " + verdict
                     + " | " + Pct(r.Wins, r.Games) + " / " + Pct(r.Draws, r.Games) + " / " + Pct(r.Losses, r.Games)
-                    + " | " + allTarget + " | " + allVerdict + " | " + Pct(r.Perfect, r.Games) + " |");
+                    + " | " + allTarget + " | " + allVerdict + " | " + SdRounds(r) + " | " + Pct(r.Perfect, r.Games) + " |");
             }
             sb.AppendLine();
             sb.AppendLine("プレイヤー役: " + player.Name + "。標準的な手持ち = はじめの 7 枚 ＋ それより前の相手から " + picks

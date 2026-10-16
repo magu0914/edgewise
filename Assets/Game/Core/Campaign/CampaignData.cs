@@ -22,7 +22,10 @@ namespace Edgewise.Core.Campaign
         /// <summary>1 手先、ノイズ ±80、見落としなし。</summary>
         public static readonly AiProfile EasyPlus = AiProfile.Easy.WithNoise(80, 0).WithName("Easy+");
 
-        /// <summary>星域 1・2 の Normal: 3 手先まで読むが、ノイズ（揺れ）を大きくして引き分けを減らす（相手ごとに幅を変える）。</summary>
+        /// <summary>
+        /// 星域 1・2 の Normal: 3 手先まで読むが、ノイズ（揺れ）を大きくして引き分けを減らす（相手ごとに幅を変える）。
+        /// 主は対戦に Sudden Death が入る（CampaignRules.MatchRules）ので引き分けで止まらず、ノイズは通常の相手より小さい。
+        /// </summary>
         public static AiProfile LooseNormal(int noise) => AiProfile.Normal.WithNoise(noise, 0);
 
         /// <summary>フリー対戦の Normal と同じ。</summary>
@@ -119,7 +122,7 @@ namespace Edgewise.Core.Campaign
                         new[] { "持っていけ。灯りの番の合間に磨いた札だ。" },
                         new[] { "この札はしばらく灯台で預かる。取り返しに来るといい。" })),
                 new Opponent("harbor-master", "マーロウ", "港の親方", "harbor", true, 15 + BossCapBonus, "Normal", "攻め気（強い辺で押す）",
-                    CampaignAi.LooseNormal(120).WithPersonality(CampaignPersonalities.Aggressive),
+                    CampaignAi.LooseNormal(70).WithPersonality(CampaignPersonalities.Aggressive),
                     new[] { "glimmouse", "dustwisp", "scalefry", "emberkit", "bolthare", "hollowshade", "voltsparrow" }, 3,
                     new Dialogue(
                         new[] { "港の親方マーロウだ！", "強い辺で正面から押す、それだけさ。かかってきな！" },
@@ -140,17 +143,17 @@ namespace Edgewise.Core.Campaign
                         new[] { "ほら、同じ数字がふたつ。きれいに揃いました。" },
                         new[] { "この札をどうぞ。写しではなく、本物ですよ。" },
                         new[] { "この札は書庫で保管します。閲覧はいつでもどうぞ。" })),
-                new Opponent("library-twins", "ピアとピオ", "双子の司書", "library", false, 25, "Normal", "Plus を狙う",
+                new Opponent("library-twins", "ユンとシア", "双子の司書", "library", false, 25, "Normal", "Plus を狙う",
                     CampaignAi.LooseNormal(180).WithPersonality(CampaignPersonalities.PlusHunter),
                     new[] { "dustwisp", "emberkit", "pyxmoth", "mirelamp", "cinderdrake", "clockwyrm", "gloamveil" }, 3,
                     new Dialogue(
-                        new[] { "ピアと！", "ピオです！ 足して同じなら、ふたりいっしょにひっくり返すよ！" },
-                        new[] { "計算、合ってたのに……", "合ってたのにー！" },
-                        new[] { "足し算の勝ち！", "勝ち！" },
-                        new[] { "はい、どうぞ。ふたりで選んだ……", "……わけじゃないけど、どうぞ！" },
-                        new[] { "これ、もらってもいい？", "いいよね！" })),
+                        new[] { "ユンと！", "シアです！ 足して同じ数になったら、ふたりでまとめてひっくり返すよ！" },
+                        new[] { "足し算は合ってたのに……", "ねえユン、どこで間違えたんだろう？" },
+                        new[] { "ぴったり同じ数！ わたしたちの勝ち！", "ね、シア！" },
+                        new[] { "はい、どうぞ。ふたりで選んだカードだよ。", "大事にしてね！" },
+                        new[] { "このカード、書庫で預かってもいい？", "取り返しに来てね！" })),
                 new Opponent("library-curator", "セレスト", "館長", "library", true, 25 + BossCapBonus, "Normal+", "連鎖重視",
-                    CampaignAi.NormalPlus.WithNoise(120, 0).WithPersonality(CampaignPersonalities.ChainSeeker),
+                    CampaignAi.NormalPlus.WithNoise(50, 0).WithPersonality(CampaignPersonalities.ChainSeeker),
                     new[] { "frostnewt", "bolthare", "gearowl", "stonetoad", "hollowshade", "tidewraith", "aquilaburst" }, 3,
                     new Dialogue(
                         new[] { "書庫の本は、一冊が次の一冊を呼ぶように並んでいます。", "一枚の裏返しが次を呼ぶ。その連なりをお見せしましょう。" },
@@ -194,11 +197,11 @@ namespace Edgewise.Core.Campaign
             new Region("gate", 4, "星界の門",
                 new RuleSet(open: false, same: true, sameWall: true, plus: true, combo: true, suddenDeath: true, pivot: true), 45, new[]
             {
-                new Opponent("gate-traveler", "ジン", "回転の旅人", "gate", false, 45, "Hard-", "Pivot を早めに切る",
+                new Opponent("gate-traveler", "テオ", "回転の旅人", "gate", false, 45, "Hard-", "Pivot を早めに切る",
                     CampaignAi.HardMinus.WithPersonality(CampaignPersonalities.EarlyPivot),
                     new[] { "forgecolossus", "auroraveil", "voltwyrm", "nocturnis", "orionmane", "cassiveil", "pegasion", "ophiwyrm" }, 5,
                     new Dialogue(
-                        new[] { "やあ、旅人のジンだ。札は回してなんぼさ！", "使える手は早めに使う。旅も勝負も、出し惜しみは損だよ。" },
+                        new[] { "やあ、旅人のテオだ。札は回してなんぼさ！", "使える手は早めに使う。旅も勝負も、出し惜しみは損だよ。" },
                         new[] { "回しすぎたかな？ まあ、それも旅の味さ。" },
                         new[] { "くるっと回して、ほら逆転！" },
                         new[] { "旅の土産だ。持っていきな。" },

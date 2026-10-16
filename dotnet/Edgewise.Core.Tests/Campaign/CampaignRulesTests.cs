@@ -211,13 +211,39 @@ namespace Edgewise.Core.Tests.Campaign
         public void MatchConfigUsesTheRegionRulesAndGamePivotTokens()
         {
             var gate = CampaignData.Regions[3];
-            var cfg = CampaignRules.MatchConfig(gate, new[] { "leomane", "draconyx", "stormgear", "auroraveil", "forgecolossus" },
+            var cfg = CampaignRules.MatchConfig(gate.Opponents[0], new[] { "leomane", "draconyx", "stormgear", "auroraveil", "forgecolossus" },
                 new[] { "leomane", "draconyx", "cygnwraith", "taurocrag", "gravelith" }, 9);
             Assert.That(cfg.Rules, Is.EqualTo(gate.Rules));
             Assert.That((cfg.PivotTokensFirst, cfg.PivotTokensSecond), Is.EqualTo(GameConstants.MatchPivotTokens(gate.Rules)));
             // 両者が同じカードを使ってもエンジンは対局できる
             var state = GameEngine.CreateGame(cfg);
             Assert.That(state.Phase, Is.EqualTo(Phase.Playing));
+        }
+
+        [Test]
+        public void BossMatchesAddSuddenDeathAndRegularMatchesDoNot()
+        {
+            var deck = new[] { "glimmouse", "dustwisp", "coglet", "scalefry", "pyxmoth" };
+            foreach (var region in CampaignData.Regions)
+            {
+                foreach (var o in region.Opponents)
+                {
+                    var cfg = CampaignRules.MatchConfig(o, deck, deck, 1);
+                    Assert.That(CampaignRules.MatchRules(o), Is.EqualTo(cfg.Rules));
+                    Assert.That(cfg.Rules.SuddenDeath, Is.EqualTo(o.IsBoss || region.Rules.SuddenDeath), o.Id);
+                    // Sudden Death 以外は星域のルールのまま
+                    var expected = new RuleSet(region.Rules.Open, region.Rules.Random, region.Rules.Same, region.Rules.SameWall, region.Rules.Plus,
+                        region.Rules.Combo, region.Rules.Elemental, cfg.Rules.SuddenDeath, region.Rules.Pivot);
+                    Assert.That(cfg.Rules, Is.EqualTo(expected), o.Id);
+                    Assert.That((cfg.PivotTokensFirst, cfg.PivotTokensSecond), Is.EqualTo(GameConstants.MatchPivotTokens(cfg.Rules)), o.Id);
+                    if (!o.IsBoss) Assert.That(cfg.Rules, Is.EqualTo(region.Rules), o.Id);
+                }
+            }
+            // 星域 1〜3 の主は SD が足され、星域 4 の主はもともと SD（Pivot トークンは 1/1）
+            Assert.That(CampaignRules.MatchRules(CampaignData.Regions[0].Boss).SuddenDeath, Is.True);
+            Assert.That(CampaignData.Regions[0].Rules.SuddenDeath, Is.False);
+            var elder = CampaignRules.MatchConfig(CampaignData.Regions[3].Boss, deck, deck, 1);
+            Assert.That((elder.PivotTokensFirst, elder.PivotTokensSecond), Is.EqualTo((1, 1)));
         }
 
         // ------------------------------------------------------------------
