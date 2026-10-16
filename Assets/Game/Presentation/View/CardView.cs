@@ -22,6 +22,9 @@ namespace Edgewise.Game.View
         [SerializeField] TextMeshPro markText;
         [SerializeField] TextMeshPro modText;
 
+        /// <summary>図鑑の収集表示の枚数（×2）。5b-2。</summary>
+        [SerializeField] TextMeshPro countText;
+
         /// <summary>カード絵（SDF アトラスと星座）。Build で GameAssets から受け取る。</summary>
         [SerializeField] CardArtAtlas art;
 
@@ -53,6 +56,7 @@ namespace Edgewise.Game.View
         static readonly int SelectId = Shader.PropertyToID("_Select");
         static readonly int AlphaId = Shader.PropertyToID("_Alpha");
         static readonly int FaceDownId = Shader.PropertyToID("_FaceDown");
+        static readonly int UnknownId = Shader.PropertyToID("_Unknown");
         static readonly int LiftId = Shader.PropertyToID("_Lift");
         static readonly int FlashId = Shader.PropertyToID("_Flash");
         static readonly int QuadSizeId = Shader.PropertyToID("_QuadSize");
@@ -72,6 +76,12 @@ namespace Edgewise.Game.View
         public Player Owner { get; private set; }
         public int Rotation { get; private set; }
         public bool FaceDown { get; private set; }
+
+        /// <summary>未入手（図鑑の収集表示）: 暗いシルエットだけで、数字・名前を伏せる。</summary>
+        public bool Unknown { get; private set; }
+
+        /// <summary>表示している枚数（0 なら出していない）。</summary>
+        public int Count { get; private set; }
 
         /// <summary>手札・盤のどこにいるか（表示側の管理用）。</summary>
         public Player HomeSide { get; set; }
@@ -131,6 +141,11 @@ namespace Edgewise.Game.View
             markText = Text("Mark", assets, new Vector2(0.385f, -0.525f), 1.25f, new Vector2(0.16f, 0.16f), null);
             modText = Text("Modifier", assets, new Vector2(0.04f, -0.035f), 3.2f, new Vector2(0.6f, 0.4f), assets.fontOutline);
             modText.gameObject.SetActive(false);
+            // 図鑑の枚数（ランクのプレートと属性の丸の間）
+            countText = Text("Count", assets, new Vector2(0.115f, 0.49f), 1.5f, new Vector2(0.26f, 0.18f), assets.fontOutline);
+            countText.fontStyle = FontStyles.Bold;
+            countText.color = Theme.Gold;
+            countText.gameObject.SetActive(false);
         }
 
         TextMeshPro Text(string name, GameAssets assets, Vector2 pos, float size, Vector2 rect, Material mat)
@@ -169,10 +184,31 @@ namespace Edgewise.Game.View
             Owner = owner;
             Rotation = rotation & 3;
             FaceDown = faceDown || def == null;
+            Unknown = false;
+            Count = 0;
             _emblemRot = -Rotation * Mathf.PI * 0.5f;
             RefreshTexts();
             _dirty = true;
             Apply();
+        }
+
+        /// <summary>未入手の表示（図鑑の収集表示）。</summary>
+        public void SetUnknown(bool unknown)
+        {
+            if (Unknown == unknown) return;
+            Unknown = unknown;
+            RefreshTexts();
+            _dirty = true;
+        }
+
+        /// <summary>持っている枚数のバッジ（0 で消す）。</summary>
+        public void SetCount(int count)
+        {
+            Count = count;
+            if (countText == null) return;
+            bool show = count > 0 && !FaceDown && !Unknown;
+            countText.gameObject.SetActive(show);
+            if (show) countText.text = "×" + count;
         }
 
         public void SetOwner(Player owner)
@@ -300,6 +336,7 @@ namespace Edgewise.Game.View
             tribeText.alpha = alpha;
             markText.alpha = alpha;
             modText.alpha = alpha;
+            if (countText != null) countText.alpha = alpha;
             _dirty = true;
         }
 
@@ -314,18 +351,20 @@ namespace Edgewise.Game.View
             tribeText.sortingOrder = order * 10 + 2;
             markText.sortingOrder = order * 10 + 2;
             modText.sortingOrder = order * 10 + 3;
+            if (countText != null) countText.sortingOrder = order * 10 + 3;
         }
 
         public int Order => _order;
 
         void RefreshTexts()
         {
-            bool show = !FaceDown && Def != null;
+            bool show = !FaceDown && !Unknown && Def != null;
+            if (countText != null) countText.gameObject.SetActive(show && Count > 0);
             for (int i = 0; i < ranks.Length; i++) ranks[i].gameObject.SetActive(show);
             nameText.gameObject.SetActive(show);
             elementText.gameObject.SetActive(show && Def.Element.HasValue);
             tribeText.gameObject.SetActive(show && Def.Tribe.HasValue);
-            markText.gameObject.SetActive(true);
+            markText.gameObject.SetActive(!Unknown);
             markText.text = Theme.Mark(Owner);
             markText.color = Theme.OwnerColor(Owner);
             if (!show)
@@ -363,6 +402,7 @@ namespace Edgewise.Game.View
             _mpb.SetFloat(SelectId, _select);
             _mpb.SetFloat(AlphaId, _alpha);
             _mpb.SetFloat(FaceDownId, FaceDown ? 1f : 0f);
+            _mpb.SetFloat(UnknownId, Unknown ? 1f : 0f);
             _mpb.SetFloat(LiftId, _lift);
             _mpb.SetFloat(FlashId, _flash);
             _mpb.SetVector(QuadSizeId, QuadSize);

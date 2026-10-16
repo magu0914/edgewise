@@ -28,11 +28,17 @@ namespace Edgewise.Game.UI
         [SerializeField] TextMeshProUGUI[] ruleStates = new TextMeshProUGUI[RuleCount];
         [SerializeField] Button beginButton;
         [SerializeField] Button backButton;
+        [SerializeField] Button dexButton;
 
         MatchSettings _settings;
 
         public event Action<MatchSettings> BeginPressed;
         public event Action BackPressed;
+
+        /// <summary>カード図鑑（フリー対戦からは全カード。5b-2）。</summary>
+        public event Action DexPressed;
+
+        public Button DexButton => dexButton;
 
         public Button BeginButton => beginButton;
         public Button RuleButton(int i) => ruleButtons[i];
@@ -98,6 +104,7 @@ namespace Edgewise.Game.UI
             }
             beginButton = UiKit.Button(root, "BeginButton", a, UiText.BeginMatch, 30, out _, new Color(0.25f, 0.42f, 0.40f));
             backButton = UiKit.Button(root, "BackButton", a, UiText.Back, 24, out _);
+            dexButton = UiKit.Button(root, "SetupDexButton", a, UiText.TitleDex, 22, out _);
             ApplyLayout(false);
         }
 
@@ -132,6 +139,7 @@ namespace Edgewise.Game.UI
                 BeginPressed?.Invoke(_settings.Clone());
             });
             backButton.onClick.AddListener(() => BackPressed?.Invoke());
+            dexButton.onClick.AddListener(() => DexPressed?.Invoke());
         }
 
         bool GetRule(int i)
@@ -169,6 +177,9 @@ namespace Edgewise.Game.UI
         public void ApplyLayout(bool portrait)
         {
             var top = new Vector2(0.5f, 1f);
+            UiKit.Place((RectTransform)dexButton.transform, new Vector2(1f, 1f), portrait ? new Vector2(-20f, -20f) : new Vector2(-24f, -18f),
+                portrait ? new Vector2(190f, 62f) : new Vector2(170f, 52f));
+            dexButton.GetComponentInChildren<TextMeshProUGUI>().fontSize = portrait ? 26 : 22;
             if (!portrait)
             {
                 UiKit.Place(title.rectTransform, top, new Vector2(0f, -22f), new Vector2(600f, 56f));

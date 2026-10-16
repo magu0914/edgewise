@@ -104,9 +104,18 @@ namespace Edgewise.Game.App
             settings.CampaignErased += () => title.SetProgress(campaign.TitleProgress);
             title.StartPressed += ShowSetup;
             title.SettingsPressed += OpenSettingsFromTitle;
-            title.DexPressed += ShowDex;
+            title.DexPressed += () => ShowDex(DexFrom.Title);
+            setup.DexPressed += () => ShowDex(DexFrom.Setup);
             title.CreditsPressed += ShowCredits;
-            dex.Closed += () => ShowTitle(title.DexButton);
+            dex.Closed += () =>
+            {
+                switch (_dexFrom)
+                {
+                    case DexFrom.Setup: ShowSetup(); break;
+                    case DexFrom.Campaign: campaign.ReturnFromDex(); break;
+                    default: ShowTitle(title.DexButton); break;
+                }
+            };
             credits.Closed += () => ShowTitle(title.CreditsButton);
             setup.BeginPressed += s => StartMatch(s);
             setup.BackPressed += ShowTitle;
@@ -146,6 +155,8 @@ namespace Edgewise.Game.App
                 return;
             }
             ShowTitle();
+            // 監査用: 立ち絵のコンタクトシート（?portraits と ?log のとき）
+            if (AutomationLog.Enabled && HasParam("portraits")) PortraitSheet.Show(title.transform.parent, assets);
         }
 
         void Update()
@@ -349,11 +360,29 @@ namespace Edgewise.Game.App
         }
 
         /// <summary>カード図鑑を開く（タイトルから）。</summary>
-        public void ShowDex()
+        /// <summary>図鑑をどこから開いたか（閉じたときの戻り先と、収集状況を出すか）。</summary>
+        public enum DexFrom
         {
+            Title = 0,
+            Setup = 1,
+            Campaign = 2,
+        }
+
+        DexFrom _dexFrom;
+
+        public void ShowDex() => ShowDex(DexFrom.Title);
+
+        /// <summary>
+        /// カード図鑑を開く（5b-2）。フリー対戦の設定画面からは今までどおり全カード。
+        /// タイトルと星図からは、星図巡りの進行があれば収集状況（「すべて見る」で全カードに切り替え）、無ければ全カード。
+        /// </summary>
+        public void ShowDex(DexFrom from)
+        {
+            _dexFrom = from;
             HideAll();
             table.SetActive(false);
-            dex.Open();
+            var collection = from != DexFrom.Setup && campaign != null && campaign.HasSave ? campaign.Session.State.Collection : null;
+            dex.Open(collection);
             PlayBgm(BgmCue.Title);
         }
 

@@ -32,6 +32,7 @@ Shader "Edgewise/Card"
         _Select ("Select", Float) = 0
         _Alpha ("Alpha", Float) = 1
         _FaceDown ("Face Down", Float) = 0
+        _Unknown ("Unknown (dark silhouette only)", Float) = 0
         _Lift ("Lift", Float) = 0
         _Flash ("Flash", Float) = 0
         _Pivot ("Pivot Turns (0..3)", Float) = 0
@@ -75,6 +76,7 @@ Shader "Edgewise/Card"
             float _Select;
             float _Alpha;
             float _FaceDown;
+            float _Unknown;
             float _Lift;
             float _Flash;
             float _Pivot;
@@ -450,6 +452,32 @@ Shader "Edgewise/Card"
                 return acc;
             }
 
+            // 未入手のカード（図鑑の収集表示。5b-2）: 暗い背景に、暗いシルエットだけ。数字・名前・星座・レベル加工は出さない
+            float4 unknownFace(float2 p, float4 acc, float inside, float d)
+            {
+                float t = saturate(p.y / 1.25 + 0.5);
+                float3 bg = lerp(S(float3(0.025, 0.03, 0.06)), S(float3(0.05, 0.06, 0.11)), t);
+                bg *= 1.0 - 0.5 * smoothstep(0.30, 0.78, length(p * float2(1.0, 0.82)));
+                acc = over(acc, bg, inside);
+                if (_ArtCount.z > 0.5)
+                {
+                    float spreadCard = _ArtSpread * ART_S;
+                    float2 cuv = artUv(p, _TiltDepth.y);
+                    float2 auv = saturate(cuv) * _ArtRect.xy + _ArtRect.zw;
+                    float sdf = SAMPLE_TEXTURE2D(_ArtTex, sampler_ArtTex, auv).r;
+                    float inCell = step(0.0, cuv.x) * step(cuv.x, 1.0) * step(0.0, cuv.y) * step(cuv.y, 1.0);
+                    float dc = lerp(spreadCard, (0.5 - sdf) * 2.0 * spreadCard, inCell);
+                    float sil = fill(dc) * inside;
+                    float3 body = lerp(S(float3(0.10, 0.11, 0.17)), S(float3(0.17, 0.19, 0.27)), saturate(cuv.y));
+                    acc = over(acc, body, sil);
+                    float rim = saturate(1.0 - abs(dc) / 0.006) * inside;
+                    acc = over(acc, S(float3(0.30, 0.33, 0.45)), rim * 0.55);
+                }
+                float inFrame = inside * (1.0 - fill(d + 0.04));
+                acc = over(acc, S(float3(0.20, 0.22, 0.30)), inFrame);
+                return acc;
+            }
+
             float4 back(float2 p, float4 acc, float inside, float d)
             {
                 float t = saturate(p.y / 1.25 + 0.5);
@@ -492,6 +520,7 @@ Shader "Edgewise/Card"
                 acc = over(acc, S(float3(1.0, 0.85, 0.45)) * 1.6, glowA * saturate(_Select) * 0.85);
 
                 if (_FaceDown > 0.5) acc = back(p, acc, inside, d);
+                else if (_Unknown > 0.5) acc = unknownFace(p, acc, inside, d);
                 else acc = face(p, acc, inside, d);
 
                 // 予告: 取れる予定のカードには「取れる」印（金の円の中に、置く位置からの向きの矢印）。所有者の色は変えない

@@ -81,7 +81,8 @@ namespace Edgewise.Tests.PlayMode
             Assert.That(_camp.Step, Is.EqualTo(CampaignStep.TalkBefore));
             yield return WaitUntil(() => _camp.Dialogue.IsOpen, "intro dialogue");
             Assert.That(_camp.Dialogue.SpeakerName, Does.Contain(_camp.Flow.Opponent.Name));
-            Assert.That(_camp.Dialogue.Portrait.InitialText, Is.EqualTo(_camp.Flow.Opponent.Name.Substring(0, 1)));
+            Assert.That(_camp.Dialogue.Portrait.ArtId, Is.EqualTo("@" + _camp.Flow.Opponent.Id), "the opponent's portrait");
+            Assert.That(_camp.Dialogue.BigPortrait.ArtId, Is.EqualTo("@" + _camp.Flow.Opponent.Id), "the big portrait above the band");
             _camp.Dialogue.Skip();
             yield return WaitUntil(() => _camp.Step == CampaignStep.Match, "match");
         }
@@ -261,6 +262,65 @@ namespace Edgewise.Tests.PlayMode
                 if (mc.gameObject.activeSelf && mc.CardId == taken && mc.MarkText == "取") marked++;
             }
             Assert.That(marked, Is.EqualTo(1), "the taken card is marked on the opponent");
+        }
+
+        /// <summary>5b-2: 図鑑の収集表示（タイトル・星図から）と、フリー対戦から開いたときの全カード表示。</summary>
+        [UnityTest]
+        public IEnumerator DexShowsTheCollectionAndHidesUnknownCards()
+        {
+            var col = new System.Collections.Generic.Dictionary<string, int>();
+            foreach (var id in CampaignData.StarterCards) col[id] = 1;
+            col["glimmouse"] = 2;
+            yield return Load(CampaignSave.ToJson(CampaignRules.NewGame(3).WithCollection(col)));
+            var all = Edgewise.Core.Data.CardCatalog.All;
+            int glim = all.ToList().FindIndex(c => c.Id == "glimmouse");
+            int leo = all.ToList().FindIndex(c => c.Id == "leomane");
+
+            // タイトルから: 収集状況（持っている枚数・収集率・未入手は暗いシルエット）
+            _app.Title.DexButton.onClick.Invoke();
+            yield return null;
+            var dex = _app.Dex;
+            Assert.That(dex.CollectionView, Is.True);
+            Assert.That(dex.CountText, Is.EqualTo("収集 7/50"));
+            Assert.That(dex.Cards[glim].Count, Is.EqualTo(2), "owned count badge");
+            Assert.That(dex.Cards[glim].Unknown, Is.False);
+            Assert.That(dex.Cards[leo].Unknown, Is.True, "unknown cards are dark silhouettes");
+            dex.OpenZoom(leo);
+            yield return null;
+            Assert.That(dex.ZoomCard.Unknown, Is.True);
+            Assert.That(dex.InfoName, Is.EqualTo("？？？"), "the name and numbers are hidden");
+            dex.BackToList();
+            // 「すべて見る」で全カード
+            dex.ViewButton.onClick.Invoke();
+            Assert.That(dex.CollectionView, Is.False);
+            Assert.That(dex.Cards.All(c => !c.Unknown), Is.True);
+            Assert.That(dex.CountText, Is.EqualTo("全 50 枚"));
+            dex.BackButton.onClick.Invoke();
+            yield return null;
+            Assert.That(_app.Title.gameObject.activeSelf, Is.True);
+
+            // フリー対戦（対戦設定）から: 今までどおり全カード
+            _app.ShowSetup();
+            _app.Setup.DexButton.onClick.Invoke();
+            yield return null;
+            Assert.That(dex.CollectionView, Is.False);
+            Assert.That(dex.ViewButton.gameObject.activeSelf, Is.False);
+            Assert.That(dex.Cards.All(c => !c.Unknown), Is.True);
+            dex.BackButton.onClick.Invoke();
+            yield return null;
+            Assert.That(_app.Setup.gameObject.activeSelf, Is.True, "back to the match setup");
+
+            // 星図から: 収集状況 → 戻ると星図
+            _app.ShowTitle();
+            _app.Title.CampaignButton.onClick.Invoke();
+            yield return WaitUntil(() => _camp.Step == CampaignStep.Map, "map");
+            _camp.Map.DexButton.onClick.Invoke();
+            yield return null;
+            Assert.That(dex.IsOpen && dex.CollectionView, Is.True);
+            dex.BackButton.onClick.Invoke();
+            yield return null;
+            Assert.That(_camp.Map.IsOpen, Is.True, "back to the map");
+            Assert.That(_camp.Step, Is.EqualTo(CampaignStep.Map));
         }
 
         [UnityTest]

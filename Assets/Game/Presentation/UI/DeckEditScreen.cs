@@ -236,8 +236,29 @@ namespace Edgewise.Game.UI
             backButton.onClick.AddListener(() => BackPressed?.Invoke());
         }
 
+        float _fpsTime, _fpsWorst;
+        int _fpsFrames;
+
+        /// <summary>この画面を開いていた間の FPS（自動操作のログ用。絵つきの小さなカードが多い画面で 60FPS を保てているか）。</summary>
+        void LogFps()
+        {
+            if (!AutomationLog.Enabled || _fpsTime < 0.3f) return;
+            AutomationLog.Write("fps-deck avg " + (_fpsFrames / _fpsTime).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " worst "
+                + (_fpsWorst * 1000f).ToString("0", System.Globalization.CultureInfo.InvariantCulture) + "ms over "
+                + _fpsTime.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "s items " + _items.Count);
+            _fpsTime = 0f;
+            _fpsFrames = 0;
+            _fpsWorst = 0f;
+        }
+
+        void OnDisable() => LogFps();
+
         void Update()
         {
+            float fdt = Time.unscaledDeltaTime;
+            _fpsTime += fdt;
+            _fpsFrames++;
+            if (_fpsFrames > 5 && fdt > _fpsWorst) _fpsWorst = fdt;
             var kb = Keyboard.current;
             if (kb != null && (kb.escapeKey.wasPressedThisFrame || kb.backspaceKey.wasPressedThisFrame) && !SettingsPanel.AnyOpen) BackPressed?.Invoke();
             // キーボードで一覧のカードを選んだら、見える位置までスクロールする

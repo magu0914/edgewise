@@ -127,6 +127,11 @@ namespace Edgewise.Game.UI
         public const string DexPrev = "◀ 前";
         public const string DexNext = "次 ▶";
         public const string DexBackToList = "一覧へ";
+        public const string DexShowAll = "すべて見る";
+        public const string DexShowCollection = "収集状況";
+        public const string DexUnknownName = "？？？";
+        public const string DexNotOwned = "まだ持っていないカード（星図巡りで手に入る）";
+        public const string DexOwned = "持っている枚数 ";
         public const string DexElement = "属性";
         public const string DexTribe = "系統";
         public const string DexNone = "なし";
@@ -150,10 +155,11 @@ namespace Edgewise.Game.UI
         public const string CreditsFontHeading = "フォント";
         public const string CreditsFontBody = "Noto Sans JP（Copyright 2014-2021 Adobe）\nSIL Open Font License, Version 1.1";
         public const string CreditsIconsHeading = "カード絵のアイコン";
-        public const string CreditsIconsBody = "カード絵の土台に game-icons.net のアイコンを使い、SDF に変換して色・光・星座を加えています（改変あり）。\n"
+        public const string CreditsIconsBody = "カード絵と対戦相手の立ち絵の土台に game-icons.net のアイコンを使い、SDF に変換して色・光・星座を加えています（改変あり）。\n"
             + "ライセンス: Creative Commons Attribution 3.0（CC BY 3.0）\n"
             + "Icons made by Lorc, Delapouite, Caro Asercion, Skoll and Cathelineau, available on https://game-icons.net";
         public const string CreditsCardHeader = "カード — アイコン（作者）";
+        public const string CreditsPortraitHeader = "立ち絵 — アイコン（作者）";
         public const string CreditsBgmHeading = "BGM（OpenTracks）";
         public const string CreditsBgmBody = "タイトル「星空」Heitaro Ashibe\n対戦「ギザなビート」マニーラ\n勝利「明日へのファンファーレ」のる\n敗北「Too late...」t.tam\n"
             + "https://opentracks.com/ のフリー素材を音源利用ライセンスに従って使用しています。素敵な楽曲をありがとうございます。";
@@ -182,6 +188,7 @@ namespace Edgewise.Game.UI
         public const string MapHint = "星域を選んでください";
         public const string MapLocked = "未解放";
         public const string MapToTitle = "タイトルへ";
+        public const string MapDex = "図鑑";
         public const string MapUnlocked = "新しい星域が開いた！";
 
         public const string RegionRules = "この星域のルール";

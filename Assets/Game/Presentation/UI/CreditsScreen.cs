@@ -49,6 +49,15 @@ namespace Edgewise.Game.UI
                     .Append(CardArtTable.License(a.author)).Append(")\n");
             }
             sb.Append('\n');
+            // 対戦相手の立ち絵（5b-2）
+            sb.Append("<color=#A9B2D1>").Append(UiText.CreditsPortraitHeader).Append("</color>\n");
+            foreach (var a in CardArtTable.PortraitAssignments)
+            {
+                var o = Edgewise.Core.Campaign.CampaignData.OpponentById(a.cardId);
+                sb.Append(o.Title).Append(' ').Append(o.Name).Append(" — ").Append(a.icon).Append(" (").Append(CardArtTable.AuthorDisplayName(a.author))
+                    .Append(", ").Append(CardArtTable.License(a.author)).Append(")\n");
+            }
+            sb.Append('\n');
             Heading(UiText.CreditsBgmHeading);
             sb.Append(UiText.CreditsBgmBody).Append("\n\n");
             Heading(UiText.CreditsSfxHeading);

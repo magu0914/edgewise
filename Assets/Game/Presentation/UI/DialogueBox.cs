@@ -27,6 +27,9 @@ namespace Edgewise.Game.UI
         [SerializeField] TextMeshProUGUI body;
         [SerializeField] TextMeshProUGUI next;
         [SerializeField] Button skipButton;
+        [SerializeField] Image dim;
+        [SerializeField] PortraitView bigPortrait;
+        [SerializeField] CanvasGroup bigGroup;
 
         readonly Typewriter _typer = new Typewriter();
         IReadOnlyList<DialogueLine> _lines;
@@ -34,6 +37,10 @@ namespace Edgewise.Game.UI
         bool _skip;
         bool _tapped;
         int _blip;
+        Vector2 _bigBase;
+        float _bigIn = 1f;
+        float _nudge;
+        float _tf = 1f;
 
         public bool IsOpen => gameObject.activeSelf;
         public int LineIndex => _index;
@@ -45,18 +52,30 @@ namespace Edgewise.Game.UI
         public Button SkipButton => skipButton;
         public Button TapArea => tapArea;
 
+        /// <summary>帯の上の大きな立ち絵（5b-2）。</summary>
+        public PortraitView BigPortrait => bigPortrait;
+
+        /// <summary>背景を暗くしている濃さ（対戦後は盤面を暗くする）。</summary>
+        public float DimAlpha => dim != null ? dim.color.a : 0f;
+
         public void Build(GameAssets a)
         {
             var root = (RectTransform)transform;
             UiKit.Stretch(root);
             for (int i = root.childCount - 1; i >= 0; i--) DestroyImmediate(root.GetChild(i).gameObject);
             var tapImg = UiKit.Fill(root, "DialogueTap", new Color(0f, 0f, 0.02f, 0.25f));
+            dim = tapImg;
             tapArea = tapImg.gameObject.AddComponent<Button>();
             tapArea.targetGraphic = tapImg;
             tapArea.transition = Selectable.Transition.None;
             var nav = tapArea.navigation;
             nav.mode = Navigation.Mode.None;
             tapArea.navigation = nav;
+            // 帯の上の空間に大きな立ち絵（登場でふわっと浮かび、台詞に合わせて呼吸のように上下する）
+            bigPortrait = PortraitView.Create(root, "BigPortrait", a, true);
+            bigGroup = bigPortrait.gameObject.AddComponent<CanvasGroup>();
+            bigGroup.blocksRaycasts = false;
+            bigGroup.interactable = false;
             band = UiKit.Panel(root, "Band", a, new Color(0.04f, 0.05f, 0.12f, 0.95f), false);
             portrait = PortraitView.Create(band.transform, "Portrait", a);
             namePlate = UiKit.Panel(band.transform, "NamePlate", a, new Color(0.16f, 0.13f, 0.06f, 0.98f), false);
@@ -82,6 +101,10 @@ namespace Edgewise.Game.UI
         {
             float w = portraitMode ? 700f : 1220f;
             float h = portraitMode ? 330f : 210f;
+            // 大きな立ち絵: 横は画面の高さの 6 割、縦は帯の上の空間に収める
+            float size = portraitMode ? 640f : 432f;
+            _bigBase = portraitMode ? new Vector2(0f, 60f) : new Vector2(0f, 92f);
+            UiKit.Place((RectTransform)bigPortrait.transform, new Vector2(0.5f, 0.5f), _bigBase, new Vector2(size, size));
             UiKit.Place((RectTransform)band.transform, new Vector2(0.5f, 0f), new Vector2(0f, portraitMode ? 20f : 18f), new Vector2(w, h));
             var tl = new Vector2(0f, 1f);
             float ps = portraitMode ? 132f : 150f;
@@ -118,12 +141,19 @@ namespace Edgewise.Game.UI
         public void Advance() => _tapped = true;
 
         /// <summary>行を順に出し、最後の行を読み終えるか、スキップされたら返る。</summary>
-        public async Awaitable PlayAsync(IReadOnlyList<DialogueLine> lines, float timeFactor, CancellationToken ct)
+        public async Awaitable PlayAsync(IReadOnlyList<DialogueLine> lines, float timeFactor, CancellationToken ct, bool overBoard = false)
         {
             _lines = lines;
             _skip = false;
             if (lines == null || lines.Count == 0) return;
             gameObject.SetActive(true);
+            _tf = timeFactor;
+            // 対戦後は盤面の上に重ねるので、背景を暗くして立ち絵を浮かせる
+            dim.color = new Color(0f, 0f, 0.02f, overBoard ? 0.82f : 0.25f);
+            bigPortrait.Show(lines[0].Speaker);
+            _bigIn = timeFactor > 0f ? 0f : 1f;
+            _nudge = 0f;
+            UpdateBig();
             EventSystem.current?.SetSelectedGameObject(null);
             var bandRt = (RectTransform)band.transform;
             try
@@ -138,6 +168,8 @@ namespace Edgewise.Game.UI
                 {
                     var line = lines[_index];
                     portrait.Show(line.Speaker);
+                    if (bigPortrait.Opponent != line.Speaker) bigPortrait.Show(line.Speaker);
+                    if (_index > 0) _nudge = 1f;
                     nameText.text = line.Speaker != null ? line.Speaker.Title + "  " + line.Speaker.Name : "";
                     body.text = line.Text;
                     _typer.Reset(line.Text);
@@ -191,6 +223,28 @@ namespace Edgewise.Game.UI
                 if (this != null) gameObject.SetActive(false);
                 if (AutomationLog.Enabled) AutomationLog.Write("dialogue end" + (_skip ? " skipped" : ""));
             }
+        }
+
+        void Update()
+        {
+            float dt = Time.unscaledDeltaTime;
+            if (_bigIn < 1f) _bigIn = Mathf.Min(1f, _bigIn + dt / Mathf.Max(0.01f, 0.6f * _tf));
+            _nudge = Mathf.Max(0f, _nudge - dt / 0.4f);
+            UpdateBig();
+        }
+
+        /// <summary>大きな立ち絵: 登場（下からふわっと浮かぶ）・呼吸のような上下・台詞が変わったときの小さな弾み。</summary>
+        void UpdateBig()
+        {
+            if (bigPortrait == null) return;
+            float t = Time.unscaledTime;
+            float e = 1f - Mathf.Pow(1f - _bigIn, 3f);
+            float breathe = _tf > 0f ? Mathf.Sin(t * 1.7f) * 5f : 0f;
+            float nudge = Mathf.Sin(_nudge * Mathf.PI) * 9f;
+            var rt = (RectTransform)bigPortrait.transform;
+            rt.anchoredPosition = _bigBase + new Vector2(0f, (1f - e) * -50f + breathe + nudge);
+            rt.localScale = Vector3.one * (Mathf.Lerp(0.92f, 1f, e) * (1f + (_tf > 0f ? 0.006f * Mathf.Sin(t * 1.7f + 0.6f) : 0f)));
+            bigGroup.alpha = e;
         }
 
         bool ReadKeys()

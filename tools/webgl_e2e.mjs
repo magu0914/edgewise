@@ -834,7 +834,7 @@ async function challengeUntilWin(opp, maxTries, shots) {
 
 /** 勝った後: 会話 → 報酬（裏向き → めくれた NEW! の瞬間）→ 次へ。 */
 async function takeReward(resAt, shots) {
-  await skipDialogue(resAt, null);
+  await skipDialogue(resAt, shots.dialogueAfter ?? null);
   const shown = await waitLine(/^reward shown (\d+)/, 30000, resAt);
   const count = +shown.m[1];
   let at = shown.index;
@@ -1026,6 +1026,126 @@ async function run5b1() {
   log('checks', JSON.stringify(checks));
 }
 
+// ---------------------------------------------------------------------------
+// Phase 5b-2: 立ち絵のコンタクトシート、星図巡りの 1 局（立ち絵・大きな立ち絵の会話・絵つきの小さなカード・報酬）、図鑑の収集状況。
+//   node tools/webgl_e2e.mjs --scenario 5b2 --serve Builds/WebGL --serve-port 8773 --out Logs/shots/5b2
+// 横 1280×720 で一通り → タイトルに戻って縦 360×640 でもう一度（星域の画面・デッキ・会話・対戦・報酬・図鑑）。
+// ---------------------------------------------------------------------------
+async function campaignRound(prefix, titleScreen, titleAt) {
+  await clickUi(titleScreen, 'CampaignButton', titleAt);
+  const resAt = await challengeUntilWin(0, 4, {
+    region: prefix + '02_region_portraits',
+    dialogue: prefix + '04a_dialogue_before',
+    match: prefix + '05_match',
+    onDeck: async (dAt) => {
+      await sleep(700);
+      await shot(prefix + '03_deck_art_cards');
+      return dAt;
+    },
+  });
+  const next = await takeReward(resAt, {
+    dialogueAfter: prefix + '04b_dialogue_after', facedown: prefix + '06a_reward_facedown', reveal: prefix + '06b_reward_reveal',
+    done: prefix + '06c_reward_done', owned: STARTER,
+  });
+  const mAt = await waitScreen('Map', next, 30000);
+  await sleep(500);
+  // 図鑑（収集状況。未入手は暗いシルエット）
+  await clickUi('Map', 'MapDexButton', mAt);
+  const dl = await waitLine(/^dex list (landscape|portrait)/, 10000, mAt);
+  await move(5, 5);
+  await sleep(1200);
+  await shot(prefix + '07_dex_collection');
+  const dAt = lastLine(/^screen Dex /).index;
+  // 未入手のカードを 1 枚拡大（数字と名前が伏せられている）
+  const cards = dexCards(dl.index - 200 > 0 ? dl.index - 200 : 0);
+  const picked = results.rewards.map((l) => l.split(' ')[2]);
+  const unknownId = Object.keys(cards).find((id) => !STARTER.includes(id) && !picked.includes(id)) ?? Object.keys(cards).pop();
+  const c = cards[unknownId];
+  const zb = consoleLines.length;
+  await click(c.x, c.y);
+  const z = await waitLine(/^dex zoom (\S+)( unknown)?/, 5000, zb);
+  results.dexZoom = (results.dexZoom ?? []).concat(z.line);
+  await sleep(900);
+  await shot(prefix + '08_dex_unknown_zoom');
+  await key('Escape');
+  await waitLine(/^dex list/, 5000, z.index);
+  await sleep(300);
+  await clickUi('Dex', 'DexBackButton', lastLine(/^screen Dex /).index);
+  const m2 = await waitScreen('Map', dAt, 10000);
+  await sleep(400);
+  await clickUi('Map', 'MapBackButton', m2);
+  return await waitScreen('Title', m2, 10000);
+}
+
+async function run5b2() {
+  results.matches = [];
+  results.rewards = [];
+  // 1. 立ち絵のコンタクトシート
+  let navAt = consoleLines.length;
+  await send('Page.navigate', { url: `${BASE}?log&portraits` });
+  await waitLine(/^portraits ready 12/, 120000, navAt);
+  await move(5, 5);
+  await sleep(2500);
+  await shot('portraits_sheet');
+
+  // 1b. 絵つきの小さなカードが多いデッキ編集（手持ち 50 種類）の FPS。終わったらデータを消して、以降は新しく始める
+  {
+    const all = ['glimmouse', 'dustwisp', 'coglet', 'emberkit', 'scalefry', 'pyxmoth', 'bolthare', 'rivetcrab', 'frostnewt', 'mirelamp', 'lynxlight', 'gearowl',
+      'cinderdrake', 'hollowshade', 'stonetoad', 'velahound', 'clockwyrm', 'tidewraith', 'marshwyvern', 'voltsparrow', 'lupusfang', 'orreryx', 'gloamveil',
+      'emberscale', 'corvusarc', 'aquilaburst', 'ironcetus', 'lanternmare', 'serpenscoil', 'rimeloom', 'leomane', 'forgecolossus', 'auroraveil', 'draconyx',
+      'stormgear', 'cygnwraith', 'taurocrag', 'gravelith', 'voltwyrm', 'nocturnis', 'orionmane', 'astrolabion', 'cassiveil', 'scorpidrake', 'polarion',
+      'andromede', 'pegasion', 'ophiwyrm', 'sextantor', 'ursamaw'].filter((id) => !STARTER.includes(id));
+    const n0 = consoleLines.length;
+    await send('Page.navigate', { url: `${BASE}?log&seed=${SEED}&speed=x2&grant=${all.join(',')}` });
+    await waitLine(/^campaign load (\S+) nosave/, 120000, n0);
+    await newGameIntro(n0, {});
+    const mapAt = await waitScreen('Map', n0, 30000);
+    await sleep(800);
+    await clickUi('Map', 'Region1', lastLine(/^screen Map /).index);
+    const rAt = await waitScreen('Region', mapAt);
+    await sleep(400);
+    await clickUi('Region', 'Challenge0', rAt);
+    await waitScreen('Deck', rAt);
+    await move(400, 500);
+    await sleep(4000);
+    await shot('L03b_deck_50_cards');
+    const dAt = lastLine(/^screen Deck /).index;
+    await clickUi('Deck', 'DeckBackButton', dAt);
+    const fd = await waitLine(/^fps-deck (.*)/, 5000, dAt);
+    results.fpsDeck50 = fd.line;
+    const r2 = await waitScreen('Region', dAt);
+    await clickUi('Region', 'RegionBackButton', r2);
+    const m2 = await waitScreen('Map', r2);
+    await sleep(300);
+    await clickUi('Map', 'MapBackButton', m2);
+    const tt = await waitScreen('Title', m2);
+    await sleep(500);
+    await openSettingsAndErase(tt, {});
+  }
+
+  // 2. 横: 新しく始める → 星図巡りの 1 局 → 図鑑
+  navAt = consoleLines.length;
+  await send('Page.navigate', { url: `${BASE}?log&seed=${SEED}&speed=x1` });
+  await waitLine(/^campaign load (\S+) nosave/, 120000, navAt);
+  await newGameIntro(navAt, {});
+  // 星図 → タイトル（campaignRound はタイトルから入る）
+  const mAt = await waitScreen('Map', navAt, 30000);
+  await sleep(500);
+  await clickUi('Map', 'MapBackButton', mAt);
+  const t1 = await waitScreen('Title', mAt, 10000);
+  await sleep(600);
+  const t2 = await campaignRound('L', 'Title', t1);
+
+  // 3. 縦 360×640 でもう一度
+  await sleep(600);
+  await send('Emulation.setDeviceMetricsOverride', { width: 360, height: 640, deviceScaleFactor: 1, mobile: false });
+  const pt = await waitScreen('Portrait', t2, 10000);
+  await sleep(1200);
+  await campaignRound('P', 'Portrait', pt);
+  await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
+  results.fps = consoleLines.filter((l) => /^fps/.test(l.line)).map((l) => l.line);
+}
+
 let exitCode = 0;
 try {
   await connect();
@@ -1036,6 +1156,10 @@ try {
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
   if (args.scenario === 'title') {
     await runTitle();
+    throw { done: true };
+  }
+  if (args.scenario === '5b2') {
+    await run5b2();
     throw { done: true };
   }
   if (args.scenario === '5b1') {

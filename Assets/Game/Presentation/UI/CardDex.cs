@@ -49,6 +49,7 @@ namespace Edgewise.Game.UI
         [SerializeField] Button prevButton;
         [SerializeField] Button nextButton;
         [SerializeField] Button listButton;
+        [SerializeField] Button viewButton;
 
         readonly List<CardView> _cards = new List<CardView>();
         CardView _zoomCard;
@@ -70,6 +71,24 @@ namespace Edgewise.Game.UI
         float _fpsWorst;
 
         public event Action Closed;
+
+        IReadOnlyDictionary<string, int> _collection;
+        bool _collectionView;
+
+        /// <summary>星図巡りの手持ち（Open で渡したもの。無ければ null）。</summary>
+        public IReadOnlyDictionary<string, int> Collection => _collection;
+
+        /// <summary>収集状況の表示か（false なら全カードを見られる）。</summary>
+        public bool CollectionView => _collectionView;
+
+        public Button ViewButton => viewButton;
+        public string CountText => count.text;
+        public string InfoName => infoName.text;
+
+        /// <summary>手持ちの枚数（収集状況の表示でないときは -1）。</summary>
+        public int OwnedCount(string id) => !_collectionView ? -1 : _collection != null && _collection.TryGetValue(id, out int n) ? n : 0;
+
+        bool IsUnknown(string id) => _collectionView && OwnedCount(id) <= 0;
 
         public Mode CurrentMode => _mode;
         public bool IsOpen => _mode != Mode.Closed;
@@ -118,6 +137,8 @@ namespace Edgewise.Game.UI
             prevButton = UiKit.Button(r, "DexPrevButton", a, UiText.DexPrev, 24, out _);
             nextButton = UiKit.Button(r, "DexNextButton", a, UiText.DexNext, 24, out _);
             listButton = UiKit.Button(r, "DexListButton", a, UiText.DexBackToList, 24, out _, new Color(0.25f, 0.42f, 0.40f));
+            // 収集状況 ⇔ すべて（星図巡りの手持ちがあるときだけ出す。5b-2）
+            viewButton = UiKit.Button(r, "DexViewButton", a, UiText.DexShowAll, 22, out _);
             ApplyLayout(false);
             gameObject.SetActive(false);
             if (worldRoot != null) worldRoot.gameObject.SetActive(false);
@@ -129,6 +150,7 @@ namespace Edgewise.Game.UI
             prevButton.onClick.AddListener(() => StepZoom(-1));
             nextButton.onClick.AddListener(() => StepZoom(+1));
             listButton.onClick.AddListener(BackToList);
+            viewButton.onClick.AddListener(() => SetCollectionView(!_collectionView));
             _grid = new DexGrid(CardCatalog.All.Count, 10);
             if (layout != null) layout.Changed += OnTableLayoutChanged;
         }
@@ -168,6 +190,8 @@ namespace Edgewise.Game.UI
                 UiKit.Place(title.rectTransform, new Vector2(0f, 1f), new Vector2(28f, -18f), new Vector2(420f, 52f));
                 UiKit.Place(count.rectTransform, new Vector2(0f, 1f), new Vector2(30f, -74f), new Vector2(300f, 36f));
                 UiKit.Place((RectTransform)backButton.transform, new Vector2(1f, 1f), new Vector2(-20f, -24f), new Vector2(170f, 84f));
+                UiKit.Place((RectTransform)viewButton.transform, new Vector2(1f, 1f), new Vector2(-204f, -24f), new Vector2(200f, 84f));
+                viewButton.GetComponentInChildren<TextMeshProUGUI>().fontSize = 26;
                 UiKit.Place(hint.rectTransform, bottom, new Vector2(0f, 10f), new Vector2(680f, 34f));
                 UiKit.Place(focusName.rectTransform, bottom, new Vector2(0f, 48f), new Vector2(680f, 40f));
                 // 拡大表示: カードは上、説明は下
@@ -189,6 +213,8 @@ namespace Edgewise.Game.UI
                 UiKit.Place(title.rectTransform, new Vector2(0f, 1f), new Vector2(30f, -16f), new Vector2(360f, 50f));
                 UiKit.Place(count.rectTransform, new Vector2(0f, 1f), new Vector2(250f, -28f), new Vector2(200f, 32f));
                 UiKit.Place((RectTransform)backButton.transform, new Vector2(1f, 1f), new Vector2(-24f, -16f), new Vector2(150f, 56f));
+                UiKit.Place((RectTransform)viewButton.transform, new Vector2(1f, 1f), new Vector2(-188f, -16f), new Vector2(170f, 56f));
+                viewButton.GetComponentInChildren<TextMeshProUGUI>().fontSize = 22;
                 UiKit.Place(hint.rectTransform, bottom, new Vector2(0f, 8f), new Vector2(1100f, 26f));
                 UiKit.Place(focusName.rectTransform, bottom, new Vector2(0f, 30f), new Vector2(900f, 34f));
                 // 拡大表示: カードは左、説明は右
@@ -215,6 +241,17 @@ namespace Edgewise.Game.UI
         // ------------------------------------------------------------------
         // 開く・閉じる
         // ------------------------------------------------------------------
+        /// <summary>
+        /// 開く。collection（星図巡りの手持ち）を渡すと収集状況の表示（持っている枚数・収集率・未入手は暗いシルエット）で開き、
+        /// 「すべて見る」で全カードの表示に切り替えられる。null なら今までどおり全カード。
+        /// </summary>
+        public void Open(IReadOnlyDictionary<string, int> collection)
+        {
+            _collection = collection;
+            _collectionView = collection != null;
+            Open();
+        }
+
         public void Open()
         {
             gameObject.SetActive(true);
@@ -225,6 +262,7 @@ namespace Edgewise.Game.UI
             _keyboard = false;
             _scroll = 0f;
             _grid.Select(0);
+            ApplyView();
             ShowListUi();
             LayoutWorld(false);
             ResetFps();
@@ -247,6 +285,36 @@ namespace Edgewise.Game.UI
             _mode = Mode.Closed;
             gameObject.SetActive(false);
             if (worldRoot != null) worldRoot.gameObject.SetActive(false);
+        }
+
+        /// <summary>収集状況 ⇔ すべて を切り替える（手持ちが無ければ常にすべて）。</summary>
+        public void SetCollectionView(bool on)
+        {
+            _collectionView = on && _collection != null;
+            ApplyView();
+            if (_mode == Mode.Zoom) OpenZoom(_grid.Selected);
+            else UpdateFocusName();
+            if (AutomationLog.Enabled) AutomationLog.Write("dex view " + (_collectionView ? "collection" : "all") + " " + count.text);
+        }
+
+        /// <summary>カードの見た目（未入手は暗いシルエット・枚数のバッジ）と、見出しの数を今の表示に合わせる。</summary>
+        void ApplyView()
+        {
+            int owned = 0;
+            for (int i = 0; i < _cards.Count; i++)
+            {
+                string id = CardCatalog.All[i].Id;
+                int n = OwnedCount(id);
+                if (n > 0) owned++;
+                _cards[i].SetUnknown(IsUnknown(id));
+                _cards[i].SetCount(_collectionView ? n : 0);
+            }
+            count.text = _collectionView
+                ? UiText.ProgressCollect + owned + "/" + CardCatalog.All.Count
+                : UiText.DexCountPrefix + CardCatalog.All.Count + UiText.DexCountSuffix;
+            count.color = _collectionView ? Theme.Gold : Theme.InkDim;
+            viewButton.gameObject.SetActive(_collection != null);
+            viewButton.GetComponentInChildren<TextMeshProUGUI>().text = _collectionView ? UiText.DexShowAll : UiText.DexShowCollection;
         }
 
         void EnsureCards()
@@ -287,6 +355,9 @@ namespace Edgewise.Game.UI
             var def = CardCatalog.All[_grid.Selected];
             _zoomCard.gameObject.SetActive(true);
             _zoomCard.Bind(def, Player.P0, 0, false);
+            bool unknown = IsUnknown(def.Id);
+            _zoomCard.SetUnknown(unknown);
+            _zoomCard.SetCount(_collectionView ? OwnedCount(def.Id) : 0);
             _zoomCard.SetOrder(80);
             _zoomCard.ResetTilt();
             var from = _cards[_grid.Selected].transform;
@@ -303,9 +374,19 @@ namespace Edgewise.Game.UI
             focusName.gameObject.SetActive(false);
             count.gameObject.SetActive(false);
             hint.text = UiText.DexHintZoom;
-            infoName.text = UiText.DexLevel + def.Level + "  " + def.Name;
-            infoMeta.text = UiText.DexElement + "  " + ElementName(def.Element) + "　　" + UiText.DexTribe + "  " + TribeName(def.Tribe);
             var table = assets.cardArtTable;
+            if (unknown)
+            {
+                // 未入手: 名前・数字・属性は伏せる（シルエットとアイコンのクレジットだけ）
+                infoName.text = UiText.DexUnknownName;
+                infoMeta.text = UiText.DexNotOwned;
+            }
+            else
+            {
+                infoName.text = UiText.DexLevel + def.Level + "  " + def.Name;
+                infoMeta.text = UiText.DexElement + "  " + ElementName(def.Element) + "　　" + UiText.DexTribe + "  " + TribeName(def.Tribe)
+                    + (_collectionView ? "　　" + UiText.DexOwned + OwnedCount(def.Id) : "");
+            }
             infoCredit.text = UiText.DexIcon + ": " + (table != null ? table.CreditLine(def.Id) : "");
             _pointerIdle = 99f;
             if (AutomationLog.Enabled)
@@ -313,7 +394,7 @@ namespace Edgewise.Game.UI
                 var s = layout.TableToScreen(pos);
                 float halfW = CardView.Size.x * scale * 0.5f, halfH = CardView.Size.y * scale * 0.5f;
                 var corner = layout.TableToScreen(pos + new Vector3(halfW, halfH, 0f));
-                AutomationLog.Write("dex zoom " + def.Id + " lv" + def.Level + " " + F(s.x) + " " + F(Screen.height - s.y) + " "
+                AutomationLog.Write("dex zoom " + def.Id + (unknown ? " unknown" : "") + " lv" + def.Level + " " + F(s.x) + " " + F(Screen.height - s.y) + " "
                     + F(corner.x - s.x) + " " + F(corner.y - s.y));
                 AutomationLog.Buttons("DexZoom", transform);
             }
@@ -450,7 +531,7 @@ namespace Edgewise.Game.UI
                 return;
             }
             var d = CardCatalog.All[i];
-            focusName.text = UiText.DexLevel + d.Level + "  " + d.Name;
+            focusName.text = IsUnknown(d.Id) ? UiText.DexUnknownName : UiText.DexLevel + d.Level + "  " + d.Name;
         }
 
         // ------------------------------------------------------------------

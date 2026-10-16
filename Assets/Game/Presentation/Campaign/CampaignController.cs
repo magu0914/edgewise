@@ -97,6 +97,7 @@ namespace Edgewise.Game.Campaign
 
             map.RegionSelected += reg => _flow.OpenRegion(reg);
             map.BackPressed += () => _flow.Back();
+            map.DexPressed += () => app.ShowDex(AppFlow.DexFrom.Campaign);
             region.ChallengePressed += o => _flow.ChooseOpponent(o);
             region.BackPressed += () => _flow.Back();
             deck.BackPressed += () => _flow.Back();
@@ -159,6 +160,13 @@ namespace Edgewise.Game.Campaign
             dialogue.gameObject.SetActive(false);
             reward.Hide();
             cleared.gameObject.SetActive(false);
+        }
+
+        /// <summary>星図から開いた図鑑を閉じた: 星図に戻る。</summary>
+        public void ReturnFromDex()
+        {
+            if (_flow != null && _flow.Step == CampaignStep.Map) ShowMap();
+            else app.ShowTitle();
         }
 
         /// <summary>星図巡りから出る（タイトルへ）。</summary>
@@ -343,7 +351,7 @@ namespace Edgewise.Game.Campaign
                 app.Result.Hide();
                 app.Hud.SetVisible(false);
             }
-            Run(ct => dialogue.PlayAsync(_flow.Lines, Tf, ct), () =>
+            Run(ct => dialogue.PlayAsync(_flow.Lines, Tf, ct, step == CampaignStep.TalkAfter), () =>
             {
                 if (_flow.Step == step) done();
             });

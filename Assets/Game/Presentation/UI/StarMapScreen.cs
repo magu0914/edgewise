@@ -30,6 +30,7 @@ namespace Edgewise.Game.UI
         [SerializeField] TextMeshProUGUI hint;
         [SerializeField] TextMeshProUGUI notice;
         [SerializeField] Button backButton;
+        [SerializeField] Button dexButton;
         [SerializeField] RawImage[] lineBase = new RawImage[3];
         [SerializeField] RawImage[] lineFill = new RawImage[3];
         [SerializeField] Button[] nodes = new Button[4];
@@ -49,6 +50,11 @@ namespace Edgewise.Game.UI
 
         public event Action<Region> RegionSelected;
         public event Action BackPressed;
+
+        /// <summary>図鑑（収集状況。5b-2）。</summary>
+        public event Action DexPressed;
+
+        public Button DexButton => dexButton;
 
         public bool IsOpen => gameObject.activeSelf;
         public Button BackButton => backButton;
@@ -73,6 +79,7 @@ namespace Edgewise.Game.UI
             hint = UiKit.Label(root, "Hint", a, UiText.MapHint, 20, Theme.InkDim);
             notice = UiKit.Label(root, "Notice", a, "", 18, new Color(1f, 0.75f, 0.6f));
             backButton = UiKit.Button(root, "MapBackButton", a, UiText.MapToTitle, 22, out _);
+            dexButton = UiKit.Button(root, "MapDexButton", a, UiText.MapDex, 22, out _);
 
             lineBase = new RawImage[3];
             lineFill = new RawImage[3];
@@ -170,6 +177,10 @@ namespace Edgewise.Game.UI
             {
                 if (_animating < 0) BackPressed?.Invoke();
             });
+            dexButton.onClick.AddListener(() =>
+            {
+                if (_animating < 0) DexPressed?.Invoke();
+            });
         }
 
         void Update()
@@ -220,6 +231,9 @@ namespace Edgewise.Game.UI
             UiKit.Place((RectTransform)backButton.transform, new Vector2(1f, 1f), new Vector2(-20f, portrait ? -22f : -14f),
                 portrait ? new Vector2(220f, 76f) : new Vector2(190f, 56f));
             backButton.GetComponentInChildren<TextMeshProUGUI>().fontSize = portrait ? 28 : 22;
+            UiKit.Place((RectTransform)dexButton.transform, new Vector2(1f, 1f), new Vector2(portrait ? -250f : -224f, portrait ? -22f : -14f),
+                portrait ? new Vector2(140f, 76f) : new Vector2(130f, 56f));
+            dexButton.GetComponentInChildren<TextMeshProUGUI>().fontSize = portrait ? 28 : 22;
             UiKit.Place(hint.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, portrait ? 26f : 20f), new Vector2(680f, 34f));
             hint.fontSize = portrait ? 26 : 20;
             UiKit.Place(notice.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, portrait ? 66f : 52f), new Vector2(portrait ? 680f : 1100f, 30f));

@@ -16,6 +16,9 @@ namespace Edgewise.Game.UI
     {
         [SerializeField] Image border;
         [SerializeField] Image fill;
+        [SerializeField] ArtGraphic art;
+        [SerializeField] Image plate;
+        [SerializeField] Image strip;
         [SerializeField] TextMeshProUGUI[] ranks = new TextMeshProUGUI[4];
         [SerializeField] TextMeshProUGUI level;
         [SerializeField] TextMeshProUGUI nameText;
@@ -29,6 +32,9 @@ namespace Edgewise.Game.UI
         [SerializeField] Button button;
 
         public string CardId { get; private set; }
+
+        /// <summary>描いているカード絵の ID（絵が無ければ null）。</summary>
+        public string ArtId => art != null && art.gameObject.activeSelf ? art.ArtId : null;
         public Button Button => button;
         public bool Dimmed { get; private set; }
         public string BadgeText => badge != null && badge.gameObject.activeSelf ? badgeText.text : "";
@@ -59,6 +65,13 @@ namespace Edgewise.Game.UI
             }
             v.fill = UiKit.Panel(root, "Fill", a, new Color(0.08f, 0.10f, 0.20f), false);
             Anchor(v.fill.rectTransform, 0f, 0f, 1f, 1f, 3f);
+            // カード絵（5b-2）: 属性色の星雲とシルエット。その上に、数字を読みやすくする濃いプレートと、名前・Lv の帯
+            v.art = ArtGraphic.Create(root, "Art", a);
+            Anchor(v.art.rectTransform, 0f, 0f, 1f, 1f, 3f);
+            v.plate = UiKit.Panel(root, "RankPlate", a, new Color(0.012f, 0.014f, 0.04f, 0.84f), false);
+            Anchor(v.plate.rectTransform, 0.05f, 0.47f, 0.67f, 0.95f, 0f);
+            v.strip = UiKit.Panel(root, "Strip", a, new Color(0.01f, 0.012f, 0.035f, 0.72f), false);
+            Anchor(v.strip.rectTransform, 0.03f, 0.03f, 0.97f, 0.24f, 0f);
 
             // ランクの菱形（上・右・下・左）。カードの上 6 割に置く
             Vector2 c = new Vector2(0.36f, 0.68f);
@@ -129,6 +142,17 @@ namespace Edgewise.Game.UI
             gameObject.SetActive(true);
             unknown.gameObject.SetActive(def == null);
             bool face = def != null;
+            art.gameObject.SetActive(face);
+            plate.gameObject.SetActive(face);
+            strip.gameObject.SetActive(face);
+            if (face)
+            {
+                var tint = Color.Lerp(Theme.ElementColor(def.Element), new Color(0.55f, 0.6f, 0.85f), def.Element.HasValue ? 0f : 0.5f);
+                float palette = def.Tribe.HasValue ? (float)(int)def.Tribe.Value : ArtGraphic.PaletteNone;
+                art.Set(def.Id, ArtGraphic.Shape.RoundRect, tint, palette, new Vector2(0.52f, 0.46f), 0.66f, false);
+                var srt = strip.rectTransform;
+                srt.anchorMax = new Vector2(0.97f, showName ? 0.39f : 0.24f);
+            }
             foreach (var r in ranks) r.gameObject.SetActive(face);
             level.gameObject.SetActive(face);
             nameText.gameObject.SetActive(face && showName);
@@ -173,6 +197,9 @@ namespace Edgewise.Game.UI
             element.gameObject.SetActive(false);
             tribe.gameObject.SetActive(false);
             unknown.gameObject.SetActive(false);
+            art.gameObject.SetActive(false);
+            plate.gameObject.SetActive(false);
+            strip.gameObject.SetActive(false);
             fill.color = new Color(0.03f, 0.04f, 0.09f, 0.85f);
             border.color = new Color(0.25f, 0.28f, 0.42f, 0.8f);
             SetBadge(0);

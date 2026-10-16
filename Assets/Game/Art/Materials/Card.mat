@@ -45,6 +45,7 @@ Material:
     - _StarCount: 0
     - _Tribe: -1
     - _TribeOn: 0
+    - _Unknown: 0
     m_Colors:
     - _ArtCount: {r: 0, g: 0, b: 0, a: 0}
     - _ArtRect: {r: 0, g: 0, b: 0, a: 0}

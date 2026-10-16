@@ -48,6 +48,7 @@ namespace Edgewise.EditorTools
             assets.shapeMaterial = EnsureMaterial("Shape", "Edgewise/Shape");
             assets.boardMaterial = EnsureMaterial("Board", "Edgewise/Board");
             assets.starfieldMaterial = EnsureMaterial("Starfield", "Edgewise/Starfield");
+            assets.uiArtMaterial = EnsureMaterial("UIArt", "Edgewise/UIArt");
             assets.font = font;
             assets.fontOutline = fontOutline;
             assets.roundRect = EnsureRoundRect();
@@ -62,6 +63,8 @@ namespace Edgewise.EditorTools
             assets.cardMaterial.SetTexture("_ArtTex", art.atlas);
             assets.cardMaterial.SetFloat("_ArtSpread", CardArtBaker.Spread / CardArtBaker.Cell);
             EditorUtility.SetDirty(assets.cardMaterial);
+            assets.uiArtMaterial.SetFloat("_ArtSpread", CardArtBaker.Spread / CardArtBaker.Cell);
+            EditorUtility.SetDirty(assets.uiArtMaterial);
             Debug.Log("[Edgewise] Card material art texture: " + (assets.cardMaterial.GetTexture("_ArtTex") != null ? assets.cardMaterial.GetTexture("_ArtTex").name : "null") + " (atlas " + (art.atlas != null) + ")");
             EditorUtility.SetDirty(assets);
             AssetDatabase.SaveAssets();

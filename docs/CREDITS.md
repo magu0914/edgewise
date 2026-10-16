@@ -1,6 +1,6 @@
 # クレジット・ライセンス
 
-本作の背景・盤面・UI のアイコンはシェーダーとコードによる手続き生成です。カード絵は下記の game-icons.net のシルエット（CC BY 3.0）を SDF に変換し、星雲・星座などをシェーダーで重ねて描いています（`docs/ART.md`）。
+本作の背景・盤面・UI のアイコンはシェーダーとコードによる手続き生成です。カード絵と対戦相手の立ち絵は下記の game-icons.net のシルエット（CC BY 3.0）を SDF に変換し、星雲・星座などをシェーダーで重ねて描いています（`docs/ART.md`）。
 効果音もすべて `AudioClip.Create` による合成音（`SfxSynth`。正弦波・三角波・ノイズ＋エンベロープ）で、外部の音素材は使っていません。
 外部から取り込んだ素材は以下のとおりです。
 
@@ -65,6 +65,26 @@ Icons made by Lorc, Delapouite, Caro Asercion, Skoll and Cathelineau, available 
 | Ursamaw | polar-bear | Cathelineau | CC BY 3.0 |
 
 ゲーム内でも、タイトルの「クレジット」画面にこの表（カード → アイコン → 作者 → ライセンス）を、カード図鑑の拡大表示に 1 行のクレジットを出しています。
+
+### 対戦相手の立ち絵（星図巡り。5b-2）
+
+立ち絵も同じ game-icons.net のアイコン（CC BY 3.0）を、カード絵と同じ方法（SDF ＋星域の色の星雲＋星座）で描いています（改変あり。`docs/ART.md`「立ち絵」）。
+ゲーム内のクレジット画面にも「立ち絵 — アイコン（作者）」として載せています。
+
+| 相手 | アイコン | 作者 | ライセンス |
+|---|---|---|---|
+| 見習い航海士 ミラ | figurehead | Delapouite | CC BY 3.0 |
+| 灯台守 オルド | monk-face | Delapouite | CC BY 3.0 |
+| 港の親方 マーロウ | lucky-fisherman | Delapouite | CC BY 3.0 |
+| 写本係 リーフ | read | Skoll | CC BY 3.0 |
+| 双子の司書 ユンとシア | face-to-face | Delapouite | CC BY 3.0 |
+| 館長 セレスト | philosopher-bust | Caro Asercion | CC BY 3.0 |
+| 気象官 ノア | person-in-blizzard | Lorc | CC BY 3.0 |
+| 霧の占い師 ヴェイル | witch-face | Cathelineau | CC BY 3.0 |
+| 観測所長 アストラ | doctor-face | Lorc | CC BY 3.0 |
+| 回転の旅人 テオ | hiking | Delapouite | CC BY 3.0 |
+| 星図の騎士 ローレル | black-knight-helm | Delapouite | CC BY 3.0 |
+| 星詠みの長 イオ | sun-priest | Delapouite | CC BY 3.0 |
 
 作者のサイト: Lorc（http://lorcblog.blogspot.com）、Delapouite（http://delapouite.com）、Caro Asercion、Skoll、Cathelineau（いずれも game-icons.net の license.txt の表記）。
 

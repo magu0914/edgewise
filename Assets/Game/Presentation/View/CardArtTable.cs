@@ -116,6 +116,37 @@ namespace Edgewise.Game.View
             new Entry("ursamaw", "cathelineau", "polar-bear"),
         };
 
+        /// <summary>立ち絵のアトラス上の ID（カード ID と区別するため "@" + 相手の ID）。</summary>
+        public static string PortraitId(string opponentId) => "@" + opponentId;
+
+        public static bool IsPortraitId(string id) => !string.IsNullOrEmpty(id) && id[0] == '@';
+
+        /// <summary>
+        /// 対戦相手 12 人の立ち絵（DESIGN §12-7）の正本。cardId には相手の ID を書き、パイプラインは <see cref="PortraitId"/> でアトラスに入れる。
+        /// 星図巡りの順（星域 1 → 4、主は各星域の最後）。選んだ理由は docs/ART.md「立ち絵」。
+        /// </summary>
+        public static IReadOnlyList<Entry> PortraitAssignments => _portraits;
+
+        static readonly Entry[] _portraits =
+        {
+            // ---- 1. 灯の港 ----
+            new Entry("harbor-apprentice", "delapouite", "figurehead", 0.98f),
+            new Entry("harbor-keeper", "delapouite", "monk-face", 0.94f),
+            new Entry("harbor-master", "delapouite", "lucky-fisherman", 0.98f),
+            // ---- 2. 鏡の書庫 ----
+            new Entry("library-scribe", "skoll", "read", 0.96f),
+            new Entry("library-twins", "delapouite", "face-to-face", 1.0f),
+            new Entry("library-curator", "caro-asercion", "philosopher-bust", 0.98f),
+            // ---- 3. 霧の観測所 ----
+            new Entry("observatory-forecaster", "lorc", "person-in-blizzard", 1.0f),
+            new Entry("observatory-seer", "cathelineau", "witch-face", 0.96f),
+            new Entry("observatory-director", "lorc", "doctor-face", 0.9f),
+            // ---- 4. 星界の門 ----
+            new Entry("gate-traveler", "delapouite", "hiking", 0.98f),
+            new Entry("gate-knight", "delapouite", "black-knight-helm", 0.88f),
+            new Entry("gate-elder", "delapouite", "sun-priest", 1.0f),
+        };
+
         /// <summary>作者フォルダ名 → 表示名（クレジット用。game-icons.net の license.txt の表記）。</summary>
         public static string AuthorDisplayName(string author)
         {

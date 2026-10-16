@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
+using Edgewise.Core.Campaign;
 using Edgewise.Core.Data;
 using Edgewise.Game.View;
 using UnityEditor;
@@ -17,7 +18,7 @@ namespace Edgewise.EditorTools
     ///   0. CardArtTable.Assignments（正本）を Assets/Game/Settings/CardArtTable.asset に書き出す
     ///   1. 採用した SVG を素材フォルダ（リポジトリ外）から Assets/Art/Icons/Source/&lt;作者&gt;/ にコピーする（無ければリポジトリ内のものを使う）
     ///   2. SVG → 512px のマスク PNG（tools/rasterize_icons.mjs。ヘッドレス Chrome）。マスクが無いとき、または -rasterize のときだけ
-    ///   3. マスク → 128px の SDF（CardArtBaker）→ 1 枚のアトラス（R8、8×7 セル）＋星座の点と線 → CardArtAtlas.asset
+    ///   3. マスク → 128px の SDF（CardArtBaker）→ 1 枚のアトラス（R8、8×8 セル。カード 50 枚＋立ち絵 12 人）＋星座の点と線 → CardArtAtlas.asset
     /// batchmode:
     ///   tools/RunUnity.ps1 -LogName art.log -Extra '-executeMethod','Edgewise.EditorTools.CardArtPipeline.Run'            （2 はマスクが無いときだけ）
     ///   tools/RunUnity.ps1 -LogName art.log -Extra '-executeMethod','Edgewise.EditorTools.CardArtPipeline.Run','-rasterize' （マスクも作り直す）
@@ -36,8 +37,9 @@ namespace Edgewise.EditorTools
         /// <summary>game-icons.net の全アイコンを展開した場所（リポジトリ外）。無ければリポジトリ内の Source を使う。</summary>
         public const string ExternalSource = "D:/Projects/tripletriad-art-source/extracted/icons-master";
 
+        /// <summary>アトラスのセル数（8×8 = 64。カード 50 枚＋立ち絵 12 人）。</summary>
         public const int Columns = 8;
-        public const int Rows = 7;
+        public const int Rows = 8;
         const int RasterPort = 9336;
 
         [MenuItem("Edgewise/Card Art/Rebuild")]
@@ -114,6 +116,12 @@ namespace Edgewise.EditorTools
             {
                 if (!byId.TryGetValue(c.Id, out var a)) throw new Exception("CardArtTable: no icon for " + c.Id);
                 list.Add(new CardArtTable.Entry(a.cardId, a.author, a.icon, a.scale, a.offset.x, a.offset.y, a.flipX));
+            }
+            // 対戦相手の立ち絵（5b-2。DESIGN §12-7）: カードの後ろのセルに、ID "@相手の ID" で入れる
+            foreach (var o in CampaignData.Opponents)
+            {
+                var a = CardArtTable.PortraitAssignments.FirstOrDefault(x => x.cardId == o.Id) ?? throw new Exception("CardArtTable: no portrait for " + o.Id);
+                list.Add(new CardArtTable.Entry(CardArtTable.PortraitId(o.Id), a.author, a.icon, a.scale, a.offset.x, a.offset.y, a.flipX));
             }
             table.entries = list;
             EditorUtility.SetDirty(table);
@@ -202,6 +210,17 @@ namespace Edgewise.EditorTools
             }
         }
 
+        /// <summary>
+        /// 星の数を決める「レベル」: カードはカードのレベル。立ち絵は星域が奥ほど・主ほど多く（星域 1 の相手 = 7 個 … 星域 4 の主 = 14 個）。
+        /// </summary>
+        public static int StarLevel(string id)
+        {
+            if (!CardArtTable.IsPortraitId(id)) return CardCatalog.ById[id].Level;
+            var o = CampaignData.OpponentById(id.Substring(1));
+            var r = CampaignData.RegionOf(o);
+            return Mathf.Clamp(r.Number * 3 - 2 + (o.IsBoss ? 2 : 0), 1, 10);
+        }
+
         /// <summary>1 枚分の SDF と星座（テストからも呼ぶ）。</summary>
         public static (CardArtBaker.BakedCell cell, CardArtBaker.Constellation stars) BakeOne(CardArtTable.Entry e, int level)
         {
@@ -222,8 +241,7 @@ namespace Edgewise.EditorTools
             for (int i = 0; i < table.entries.Count; i++)
             {
                 var e = table.entries[i];
-                var def = CardCatalog.ById[e.cardId];
-                var (cell, stars) = BakeOne(e, def.Level);
+                var (cell, stars) = BakeOne(e, StarLevel(e.cardId));
                 int col = i % Columns, row = i / Columns;
                 for (int y = 0; y < cs; y++)
                 {

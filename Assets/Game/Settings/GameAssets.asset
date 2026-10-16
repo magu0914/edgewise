@@ -19,6 +19,7 @@ MonoBehaviour:
   shapeMaterial: {fileID: 2100000, guid: 8909f14c81936bf4caf7489537a5a46f, type: 2}
   boardMaterial: {fileID: 2100000, guid: 9d42a23ff0d222f4b89389abfc87c966, type: 2}
   starfieldMaterial: {fileID: 2100000, guid: 3afbdfd9742176d4e99e24399e2fb57d, type: 2}
+  uiArtMaterial: {fileID: 2100000, guid: 002e19d974bea2348a1895153c54894f, type: 2}
   font: {fileID: 11400000, guid: 99d674016588c7a478fef18f3c6c67cd, type: 2}
   fontOutline: {fileID: 2100000, guid: 816b0bbefb326d349b1c4d63f516b294, type: 2}
   roundRect: {fileID: 21300000, guid: 1f34ea91dfb52324886bcc8d0170df45, type: 3}

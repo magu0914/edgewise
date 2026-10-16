@@ -49,7 +49,8 @@ namespace Edgewise.Tests.EditMode
                 Assert.That(e.lines.Length, Is.InRange(e.stars.Length - 1, CardArtAtlas.MaxLines), c.Id + " lines");
                 foreach (var s in e.stars) Assert.That(s.x >= 0 && s.x <= 1 && s.y >= 0 && s.y <= 1, c.Id + " star inside the cell");
             }
-            Assert.That(atlas.entries.Select(e => e.cell).Distinct().Count(), Is.EqualTo(CardCatalog.All.Count));
+            // 5b-2: カード 50 枚＋対戦相手の立ち絵 12 人が、それぞれ別のセルに入る
+            Assert.That(atlas.entries.Select(e => e.cell).Distinct().Count(), Is.EqualTo(CardCatalog.All.Count + Edgewise.Core.Campaign.CampaignData.Opponents.Count));
         }
 
         [Test]

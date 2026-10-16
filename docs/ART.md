@@ -1,4 +1,4 @@
-# カードイラスト（Phase 4）
+# カードイラストと立ち絵（Phase 4・5b-2）
 
 DESIGN §7-1 の実装記録。カードの絵は game-icons.net のシルエット（CC BY 3.0）を土台に、シェーダーで星雲・シルエット・星座を重ねて描く。
 クレジットは `docs/CREDITS.md`。
@@ -86,7 +86,7 @@ CardArtTable.Assignments（Presentation のコード。正本）
   → CardArtBaker: 外接矩形をセルに合わせて 512px で二値化 → 厳密な距離変換（Felzenszwalb）→ 4×4 平均で 128px の SDF
                   輪郭から星 7〜14 個（Lv1 = 7 … Lv10 = 14。先端を優先した最遠点サンプリング、揺らぎはカード ID の FNV-1a）
                   線は「外にはみ出すほど重い」最小全域木＋ループ 1 本
-  → Assets/Art/Icons/Generated/CardArtAtlas.png（1024×896、R8、8×7 セル、ミップマップあり）＋ CardArtAtlas.asset（星と線）
+  → Assets/Art/Icons/Generated/CardArtAtlas.png（1024×1024、R8、8×8 セル（5b-2 で立ち絵 12 人を足した）、ミップマップあり）＋ CardArtAtlas.asset（星と線）
 ```
 
 | 操作 | コマンド |
@@ -115,3 +115,39 @@ Pivot で回したカードは、カード絵（シルエットと星座）ご�
 - **タイトルの扇**（`TitleFan`）: Lv8〜10 の 10 枚が、ロゴの下を要にした扇の弧に沿ってゆっくり回り（3.2°/秒）、端で薄れて反対の端から戻る。ロゴと「はじめる」を読みやすく保つため半透明（最大 50%）。カードはそれぞれゆっくり傾き、ホロやオーロラが流れて見える。
 - **手札**: カーソルを乗せた（キーボードで選んだ）手札は 1.12 倍で前に出て、重なりに隠れずに全体が見える。横画面の重なりも少し減らした（間隔の上限 0.74 → 0.86）。
 - **クレジット画面**（`CreditsScreen`）: フォント・カード絵のアイコン（50 枚の作者と CC BY 3.0）・BGM・効果音・オマージュの表記。文字は `UiText` から作り、フォントに焼いた文字だけで表示できることを EditMode でテストしている。
+## 立ち絵（5b-2。DESIGN §12-7）
+
+星図巡りの対戦相手 12 人の立ち絵。カード絵と同じパイプライン（SVG → マスク → 128px の SDF ＋星座）で、**同じアトラス**（8×8 セル・1024×1024。カード 50 枚の後ろに 12 人）に ID `@<相手の ID>` で入れる。
+正本は `CardArtTable.PortraitAssignments`。星の数は星域が奥ほど・主ほど多い（`CardArtPipeline.StarLevel`: 星域 1 の相手 7 個 … 星域 4 の主 14 個）。
+
+### 選定の方針
+- 肩書きと性格が一目で伝わる人物・顔のシルエット。12 人の形（全身・半身・顔・兜・胸像・2 人組）がばらけるようにし、カード絵のアイコンとも重ねない。
+- FF シリーズの人物、特に原作でカードゲームに関わる人物（トランプの絵札、2 人組の少女など）を連想させない。トランプの絵札（card-king / card-queen）と、トンベリを連想させるフードの人物（hood・robe・cowled）は使わない。
+- 双子は 2 人が並んだアイコン（face-to-face）にした。
+
+| 相手 | アイコン | 作者 | 理由 |
+|---|---|---|---|
+| 見習い航海士 ミラ | figurehead | Delapouite | 船首像の乙女。前を向いて海へ乗り出す姿が、見習いの元気さと航海を表す |
+| 灯台守 オルド | monk-face | Delapouite | いかつい老人の顔。岬で灯を守り続ける頑固な守り型 |
+| 港の親方 マーロウ | lucky-fisherman | Delapouite | 大魚を抱えた港の男。腕っぷしと攻め気（主） |
+| 写本係 リーフ | read | Skoll | 本を広げて読む人。一字一句写す書庫の係 |
+| 双子の司書 ユンとシア | face-to-face | Delapouite | 腕を組んで並ぶ 2 人。双子の息の合った掛け合い |
+| 館長 セレスト | philosopher-bust | Caro Asercion | 台座の上の胸像。書庫の奥に構える知の番人（主） |
+| 気象官 ノア | person-in-blizzard | Lorc | 雪の結晶の舞う中に立つ人。天気を読む |
+| 霧の占い師 ヴェイル | witch-face | Cathelineau | とんがり帽子の魔女の横顔。読みにくい気まぐれ |
+| 観測所長 アストラ | doctor-face | Lorc | 大きなゴーグルで表情の見えない顔。感情を排した観測者（主） |
+| 回転の旅人 テオ | hiking | Delapouite | 杖をついて坂を登る旅人 |
+| 星図の騎士 ローレル | black-knight-helm | Delapouite | 隙のない閉じた大兜。門を守る守り型（全身の騎馬 mounted-knight はカード Lanternmare の騎手と形が重なるため外した） |
+| 星詠みの長 イオ | sun-priest | Delapouite | 光の冠を戴き、両手を天に掲げる長。星を詠む最強の主 |
+
+### 描画（uGUI）
+- 立ち絵と、デッキ編集・星域の画面の小さなカード（`MiniCardView`）は uGUI に描くので、`ArtGraphic`（MaskableGraphic）と `Edgewise/UIArt` シェーダーで描く。
+  1 つのメッシュに「本体（星雲＋シルエット）」「星」「線」の四角形を並べ、頂点の uv1〜uv3 で描き分ける。マテリアルとテクスチャ（SDF アトラス）を共有するので、小さなカードが 50 枚並んでも描画はまとまる。
+  Canvas の `additionalShaderChannels` に TexCoord1〜3 が必要（`SceneBuilder`）。RectMask2D（デッキの一覧のスクロール）の切り抜きに対応。
+- `PortraitView`: 小さな印（円の中の立ち絵・星域の色の輪と光・主は冠）と、大きな立ち絵（柔らかい光の中に浮かぶ立ち絵と星座。会話の画面）。
+- 小さなカード: 属性色の星雲と系統の色のシルエット。数字の読みやすさを優先し、ランクの下に濃いプレート、名前と Lv の下に濃い帯を敷く。
+- 図鑑の未入手のカード: `Card.shader` の `_Unknown`（暗い背景に暗いシルエットだけ。数字・名前・星座・レベル加工を出さない）。
+
+### コンタクトシート
+`index.html?log&portraits` を開くと、タイトルの上に 12 人（大きな立ち絵・小さな印・名前・アイコン）を並べる（`PortraitSheet`）。
+`node tools/webgl_e2e.mjs --scenario 5b2 ...` が `Logs/shots/5b2/portraits_sheet.png` に撮る。

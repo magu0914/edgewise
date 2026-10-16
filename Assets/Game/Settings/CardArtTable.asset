@@ -313,3 +313,75 @@ MonoBehaviour:
     scale: 1
     offset: {x: 0, y: 0}
     flipX: 0
+  - cardId: '@harbor-apprentice'
+    author: delapouite
+    icon: figurehead
+    scale: 0.98
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: '@harbor-keeper'
+    author: delapouite
+    icon: monk-face
+    scale: 0.94
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: '@harbor-master'
+    author: delapouite
+    icon: lucky-fisherman
+    scale: 0.98
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: '@library-scribe'
+    author: skoll
+    icon: read
+    scale: 0.96
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: '@library-twins'
+    author: delapouite
+    icon: face-to-face
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: '@library-curator'
+    author: caro-asercion
+    icon: philosopher-bust
+    scale: 0.98
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: '@observatory-forecaster'
+    author: lorc
+    icon: person-in-blizzard
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: '@observatory-seer'
+    author: cathelineau
+    icon: witch-face
+    scale: 0.96
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: '@observatory-director'
+    author: lorc
+    icon: doctor-face
+    scale: 0.9
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: '@gate-traveler'
+    author: delapouite
+    icon: hiking
+    scale: 0.98
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: '@gate-knight'
+    author: delapouite
+    icon: black-knight-helm
+    scale: 0.88
+    offset: {x: 0, y: 0}
+    flipX: 0
+  - cardId: '@gate-elder'
+    author: delapouite
+    icon: sun-priest
+    scale: 1
+    offset: {x: 0, y: 0}
+    flipX: 0

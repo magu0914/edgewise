@@ -19,6 +19,9 @@ namespace Edgewise.Game.View
         public Material shapeMaterial;
         public Material boardMaterial;
         public Material starfieldMaterial;
+
+        /// <summary>uGUI のカード絵・立ち絵（Edgewise/UIArt。5b-2）。</summary>
+        public Material uiArtMaterial;
         public TMP_FontAsset font;
 
         /// <summary>縁取りつき（カードのランク・大きな文字）。</summary>

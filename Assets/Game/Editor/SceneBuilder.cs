@@ -103,6 +103,9 @@ namespace Edgewise.EditorTools
             var canvas = canvasGo.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 10;
+            // カード絵・立ち絵の UI シェーダー（ArtGraphic）は uv1〜uv3 を使う（5b-2）
+            canvas.additionalShaderChannels |= AdditionalCanvasShaderChannels.TexCoord1 | AdditionalCanvasShaderChannels.TexCoord2
+                | AdditionalCanvasShaderChannels.TexCoord3;
             var scaler = canvasGo.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1280, 720);

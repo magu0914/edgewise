@@ -6,7 +6,9 @@
         "UnityEditor.TestRunner",
         "Edgewise.Core",
         "Edgewise.Game",
-        "Edgewise.Editor"
+        "Edgewise.Editor",
+        "Unity.TextMeshPro",
+        "UnityEngine.UI"
     ],
     "includePlatforms": [
         "Editor"
