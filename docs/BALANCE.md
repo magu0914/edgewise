@@ -2,7 +2,7 @@
 
 DESIGN.md §6 の自己対戦シミュレーター（`dotnet/Edgewise.Sim`）による計測結果。Phase 2 のベースライン（CPU 3 難易度の強さと、原作ルールの先攻有利・引き分け率）を記録する。
 Pivot のトークン数などの調整（Phase 4）は、この表を基準に差分で判断する。
-**Pivot の先攻有利の修正（Phase 3c）は末尾の「Phase 3c: Pivot の非対称化」**。
+**Pivot の先攻有利の修正（Phase 3c）は「Phase 3c: Pivot の非対称化」、星図巡りの進行バランス（Phase 5a）は末尾の「Phase 5a: 星図巡りの進行バランス」**。
 
 ## 測定条件
 
@@ -350,3 +350,157 @@ dotnet run -c Release --project dotnet/Edgewise.Sim -- --match hard:easy,hard:no
 追加したプリセット: `all-nopivot`（全部入りから Pivot を外す）、`pivot-sd`、`spc-pivot`、`all-nosd`、`pivot-openoff`、`all-openoff-nopivot`。
 出力には「Pivot の使用（役割別）」と「決着したラウンド別の先攻勝率」の表を足した。
 マシン・ビルドは Phase 2 と同じ（i7-12700F、20 スレッド、.NET 9、Release）。
+
+---
+
+## Phase 5a: 星図巡りの進行バランス
+
+DESIGN §12-9。星図巡り（一人用モード）の 12 人の相手について、「その時点の標準的な手持ち」で組んだ最善デッキのプレイヤー役 AI（Normal）が勝つ割合を測り、§12-9 の目標に入るまで相手の持ちカードと AI の強さを調整した。
+データの正本は `Assets/Game/Core/Campaign/CampaignData.cs`、ルールは `CampaignRules.cs`、計測は `dotnet/Edgewise.Sim/CampaignSim.cs`（`--campaign`）。
+
+### 結論
+
+**12 人全員が目標に入った（seed 2026 と seed 99 の両方、各 1000 配牌 × 席交代 = 2000 局）。**
+
+| 星域 | 相手 | AI / 性格 | 相手デッキ Lv 平均（上限） | プレイヤーのデッキ（合計 Lv） | 勝率 seed 2026 [95% CI] | 勝率 seed 99 | 目標 | 引き分け | 完勝 |
+|---|---|---|---:|---|---:|---:|---:|---:|---:|
+| 1. 灯の港 | 見習い航海士 ミラ | Easy / 素直 | 11.5（15） | Lv8: coglet scalefry pyxmoth rivetcrab mirelamp | **76.8%** [74.3, 79.1] | 78.7% | 70〜80% | 43% | 0% |
+| | 灯台守 オルド | Easy+ / 角・端の守り | 14.0（15） | Lv10: ＋lynxlight | **77.3%** [74.4, 80.0] | 75.3% | 70〜80% | 56% | 0% |
+| | **主** 港の親方 ガーネット | Normal / 攻め気 | 9.5（20） | Lv12: ＋velahound | **58.0%** [54.6, 61.3] | 55.8% | 55〜65% | 59% | 0% |
+| 2. 鏡の書庫 | 写本係 リーフ | Normal / Same 狙い | 11.6（25） | Lv15: ＋voltsparrow | **68.2%** [65.2, 71.1] | 68.7% | 65〜75% | 53% | 0% |
+| | 双子の司書 ピアとピオ | Normal / Plus 狙い | 14.2（25） | Lv18: ＋orreryx | **69.8%** [66.7, 72.8] | 69.8% | 65〜75% | 56% | 0% |
+| | **主** 館長 セレスト | Normal+ / 連鎖重視 | 17.3（30） | Lv21: ＋gloamveil | **54.9%** [51.4, 58.2] | 56.1% | 50〜60% | 59% | 0% |
+| 3. 霧の観測所 | 気象官 ノア | Normal+ / 属性マス重視 | 29.4（35） | Lv24: ＋aquilaburst | **58.1%** [55.7, 60.5] | 57.4% | 55〜65% | 21% | 4% |
+| | 霧の占い師 ヴェイル | Hard- / 揺らぎ大 | 29.1（35） | Lv27: ＋leomane | **60.8%** [58.2, 63.3] | 60.5% | 55〜65% | 30% | 2% |
+| | **主** 観測所長 アストラ | Hard / 冷静 | 37.8（40） | Lv31: ＋nocturnis | **52.6%** [49.9, 55.2] | 52.5% | 45〜55% | 31% | 1% |
+| 4. 星界の門 | 回転の旅人 ジン | Hard- / Pivot 早切り | 42.5（45） | Lv35: ＋astrolabion | **54.3%** [52.1, 56.4] | 51.9% | 50〜60% | 0% | 3% |
+| | 星図の騎士 ローレル | Hard（2.5 万ノード）/ 守り型 | 43.2（45） | Lv40: ＋pegasion | **54.5%** [52.3, 56.7] | 54.1% | 50〜60% | 0% | 2% |
+| | **主** 星詠みの長 イオ | Hard / 最強 | 46.1（50） | Lv44: ＋ursamaw | **40.4%** [38.3, 42.6] | 40.5% | 35〜45% | 0% | 1% |
+
+勝率はプレイヤー役から見た値で、引き分けを除く（既存の表と同じ定義）。「プレイヤーのデッキ」の「＋」は直前の相手からもらって新しくデッキに入ったカード。
+
+### 測定の条件
+
+| 項目 | 値 |
+|---|---|
+| 標準的な手持ち | はじめの 7 枚 ＋ それより前の相手（星図の順。同じ星域の主の前の 2 人も含む）に **1 回ずつ勝って 1 枚ずつ**もらったもの。もらうカードは、その相手の持ちカードのうちまだ持っていない最も強いもの（レベル → 辺の合計 → カタログ順）。「初めての人が 1 人に 1 回勝って先へ進む」最短の道筋（`--picks` で 1 人あたりの枚数を変えられる） |
+| プレイヤーのデッキ | 標準的な手持ちから「おまかせ」（`CampaignRules.AutoDeck`。上限内で辺の合計＋星域ルールとの相性が最大の 5 枚） |
+| プレイヤー役の AI | Normal（フリー対戦と同じ。性格なし） |
+| 相手のデッキ | 配牌ごとに `CampaignRules.ChooseOpponentDeck`（持ちカードの 5 枚の組のうち、上限内で組める最大の合計 Lv から DeckSlack 以内のものを seed で選ぶ） |
+| ルール | 星域の固定ルール。Pivot トークンはゲーム本体の既定（`GameConstants.MatchPivotTokens`。星界の門は Sudden Death ON なので 1/1） |
+| Open OFF の決定化 | 両者とも `CardPoolModel.Shared`（DESIGN §12-6）。プレイヤー役は**相手の持ちカード**（相手選択画面で見える情報）を候補に、相手は**全 50 枚**を候補にする |
+| 局数・乱数 | 相手ごとに 1000 配牌 × 席交代 2 局。seed 2026（本表）と 99（確認） |
+| マシン | i7-12700F、20 スレッド、.NET 9、Release。全 12 人で約 2 分 |
+
+### 調整の経緯
+
+調整前（設計表どおりの Lv 帯・AI）の結果（seed 2026、1000 配牌）:
+
+| 相手 | AI（調整前） | 相手デッキ Lv 平均 | プレイヤーのデッキ | 勝率 | 目標 | 判定 |
+|---|---|---:|---|---:|---:|:---:|
+| ミラ | Easy（フリー対戦と同じ） | 7.8 | Lv8 | 98.5% | 70〜80% | ✕ 弱すぎ |
+| オルド | Easy（ノイズ ±90・見落とし 20%） | 11.5 | Lv9 | 94.5% | 70〜80% | ✕ 弱すぎ |
+| ガーネット | Normal | 18.6 | Lv10 | 6.8% | 55〜65% | ✕ 強すぎ |
+| リーフ | Normal | 19.3 | Lv14 | 34.1% | 65〜75% | ✕ 強すぎ |
+| ピアとピオ | Normal | 23.0 | Lv17 | 32.3% | 65〜75% | ✕ 強すぎ |
+| セレスト | Normal+（深さ 4・ノイズ ±25） | 27.9 | Lv21 | 0.0% | 50〜60% | ✕ 強すぎ |
+| ノア | Normal+（同上） | 29.4 | Lv26 | 67.8% | 55〜65% | ✕ やや弱い |
+| ヴェイル | Hard-（12 万ノード・ノイズ ±30） | 32.0 | Lv30 | 64.5% | 55〜65% | ○（上限際） |
+| アストラ | Hard | 37.8 | Lv33 | 54.4% | 45〜55% | ○ |
+| ジン | Hard- | 42.0 | Lv37 | 62.3% | 50〜60% | ✕ やや弱い |
+| ローレル | Hard | 43.6 | Lv41 | 38.1% | 50〜60% | ✕ 強すぎ |
+| イオ | Hard | 45.1 | Lv44 | 48.6% | 35〜45% | ✕ 弱い |
+
+（この表は `Logs/balance5a/before-tune.txt` の `--tune` で調整前のデータを再現して測った。）
+
+主な発見と手当て:
+
+1. **標準的な手持ちは「上限」に届かない**。1 人に勝つごとに 1 枚なので、プレイヤーのデッキは「直近にもらった 3 枚＋はじめの手持ち 2 枚」程度で、星域 2 では Lv15〜21（上限 25）。設計表の Lv 帯（星域 2 の相手は Lv3〜7）のままでは相手が一方的に強い。
+   → 相手の持ちカードを「**ご褒美の 1 枚（プレイヤーの今の最強より 1 段上）＋それより弱いカード**」の形にした。ご褒美が次の相手で使うカードになり、デッキが 1 人ごとに 1 段ずつ育つ。星域 1・2 の相手は Lv1〜6、星域 3・4 は設計表に近い Lv4〜10。
+2. **フリー対戦の Easy は Normal に対して弱すぎる**（同じ強さの手札でも 9 割負ける。ノイズ ±150・見落とし 40%）。カードを 2 段強くしても 88%。
+   → 星図巡りの Easy は「1 手先・ノイズ ±40・見落としなし」（`CampaignAi.Easy`）、Easy+ は「2 手先・ノイズ ±60」（`CampaignAi.EasyPlus`）にした。
+3. **Normal+（深さ 4）は Normal に対して 8 割以上勝ち、段階として大きすぎた**（セレストの手札をプレイヤーより弱くしても、プレイヤー役の勝率は 3〜24%）。
+   → Normal+ は「Normal からノイズを除き、決定化の世界を 4 つにしたもの」にした（Normal との差は小さいが、性格で個性を出す）。
+4. **基本ルール（Open のみ）は引き分けが多く、引き分けを除いた勝率が手札の差に敏感**。ガーネットの DeckSlack を 3 → 2 にするだけで 67% → 49% に動いた。手札 1 枚の入れ替え（coglet → scalefry）で 58% に合わせた。
+5. **星界の門（Pivot＋Sudden Death＋Open OFF）の Hard は持ちカードを弱くしても勝率が下がらない**（ローレルのデッキを Lv43 → 35 にしても 57〜63% 勝つ）。
+   → ローレルは Hard の読み方（読み切り・ノイズなし）のまま予算を 25,000 ノード・世界 4 に絞った（`CampaignAi.HardLight`。表示は Hard のまま）。
+6. **Lv10 の配置**: 「Lv10 は星域 4 だけ」「イオは 2 枚」「50 枚すべてを誰かが持つ」を同時に満たすには、残りの 3 枚をジン・ローレルが持つ必要がある（設計表の Lv7〜9 を外れる）。ローレルに 2 枚持たせると強すぎたので、**ジン 2 枚（pegasion・ophiwyrm）、ローレル 1 枚（ursamaw）、イオ 2 枚（andromede・sextantor）**にした。
+7. イオは DeckSlack 1（ほぼ常に最強のデッキ）、ジンは 5（デッキがばらつく）。ヴェイルは nocturnis（アストラ戦で使うご褒美）を残したまま forgecolossus を corvusarc に替えて 60% にした（ご褒美を変えると、その後の 3 人の標準的な手持ちが変わり、星域 3・4 全体が 5〜10 ポイント動くため）。
+
+### 性格をつけても難易度の順は崩れない（§12-5）
+
+各相手の AI（性格つき）とフリー対戦の Easy / Hard を、**プレイヤー役と同じ Normal** と戦わせた（ランダムな配牌、300 配牌 × 席交代、seed 2026）。引き分けを除いた勝率:
+
+| AI | 星域 1 のルール（Open のみ） | 星域 3 のルール（Open OFF・Elemental・Same・Plus・Combo） |
+|---|---:|---:|
+| フリー対戦の Easy | 9.0% | 14.7% |
+| ミラ（Easy / 素直） | 14.7% | 26.5% |
+| オルド（Easy+ / 角・端の守り） | 17.4% | 25.9% |
+| ガーネット・リーフ・ピアとピオ（Normal） | 48.5〜51.7% | 45.0〜54.7% |
+| セレスト・ノア（Normal+） | 58.6〜58.7% | 43.8〜47.2% |
+| ヴェイル（Hard- / 揺らぎ大） | 69.1% | 49.0% |
+| ジン（Hard- / Pivot 早切り） | 76.4% | 57.1% |
+| ローレル（Hard 2.5 万ノード / 守り型） | 74.6% | 51.5% |
+| アストラ・イオ・フリー対戦の Hard | 77.9% | 60.7% |
+
+Easy 系（15〜27%）＜ Normal 系（44〜59%）＜ Hard 系（49〜78%）の順は両方のルールで保たれる。
+ただし星域 3 のルールでは、Normal+ の 2 人（連鎖重視・属性重視のボーナス）と、揺らぎ大のヴェイルは Normal と同程度まで下がる（性格は強さと引き換えに個性を出す）。Hard（同点の手の間の好みだけ）の性格は強さを変えない。
+
+### 性格の効き方（`dotnet test` の PersonalityTests の出力）
+
+性格のボーナスはルート局面の手の選択にだけ足す（探索の中身・評価関数は変えない）。「その性格が好む手」が 1 つ以上あり全部ではない局面で、好む手を選んだ割合:
+
+| 性格（AI） | 性格なし → あり |
+|---|---:|
+| Same 狙い（Normal、Same＋Same Wall） | 21.9% → **61.2%**（242 局面） |
+| Plus 狙い（Normal、Plus） | 32.8% → **72.4%**（116 局面） |
+| 角・端の守り（Easy、基本） | 角に置く 38.4% → **66.7%**（396 局面） |
+| 属性マス重視（Normal、Elemental） | 一致するマスに置く 8.7% → **41.3%**（206 局面） |
+| Pivot 早切り（Normal、Pivot） | 回転して置く 39.4% → **92.1%**（241 局面） |
+| 素直（Easy、基本） | 1 手で裏返す枚数 0.80 → **0.94** |
+| 揺らぎ大（Hard-） | 同じ局面で seed を 8 通り変えたときの手の種類（40 局面の合計）78 → **128** |
+| 守り型（Hard、同点の手の間だけ） | 読み切った 104 局面のうち 21 局面で、同じ値の別の手を選んだ（値は常に最善） |
+
+### 気づいた点（5b・5c への申し送り）
+
+- **星域 1・2 は引き分けが多い（43〜59%）**。基本ルールと Same/Plus だけでは強さの近い同士が引き分けやすい。引き分けは「何も起きない」ので、体感の進み方は「勝ち / 全対戦」で 1/3 程度になる（ミラで 44%、ガーネットで 24%）。5c の試遊で確かめたい。
+- **プレイヤー役の Normal は人間の初心者より強いと思われる**。面接官が初見で遊ぶと、表より勝率は下がる見込み。
+- 星界の門は Sudden Death で引き分けがほぼなくなる（0〜0.2%）。
+- Open OFF で、プレイヤー役は相手の持ちカード（7〜8 枚）を知っている前提で測った。初対戦（まだ「？」が多い）では少し不利になる。
+
+### 再現コマンド
+
+```
+# 本表（約 2 分）
+dotnet run -c Release --project dotnet/Edgewise.Sim -- --campaign --deals 1000 --seed 2026 --out Logs/balance5a/final-2026.md
+
+# 確認（別 seed）
+dotnet run -c Release --project dotnet/Edgewise.Sim -- --campaign --deals 1000 --seed 99 --out Logs/balance5a/final-99.md
+
+# 難易度の順（相手の AI 対 Normal。opp.<相手の ID> で相手の AI を指定、region1〜4 は星域のルール。約 2 分）
+dotnet run -c Release --project dotnet/Edgewise.Sim -- --match "easy:normal,opp.harbor-apprentice:normal,opp.harbor-keeper:normal,opp.harbor-master:normal,opp.library-scribe:normal,opp.library-twins:normal,opp.library-curator:normal,opp.observatory-forecaster:normal,opp.observatory-seer:normal,opp.observatory-director:normal,opp.gate-traveler:normal,opp.gate-knight:normal,opp.gate-elder:normal,hard:normal" --rules region1,region3 --deals 300 --seed 2026
+
+# 性格の効き方（テストの出力に [personality] 行が出る）
+dotnet test dotnet/Edgewise.sln --filter "FullyQualifiedName~PersonalityTests" --logger "console;verbosity=normal"
+```
+
+調整用のオプション: `--only ID,...`（相手を絞る）、`--picks K`（標準的な手持ちで 1 人あたり何枚もらうか）、`--player SPEC`（プレイヤー役の AI）、
+`--tune "ID:ai=normal/noise=60;cards=a+b+c;slack=2|ID2:..."`（相手の AI・持ちカード・DeckSlack をビルドし直さずに上書き。上書きした相手は標準的な手持ちの計算にも使う）。
+調整前の再現: `--tune` に `Logs/balance5a/before-tune.txt` の 1 行を渡す（Logs はリポジトリ外なので、内容は下の表のとおり）。
+
+調整前のデータ（`--tune` 用）:
+
+| 相手 | AI | 持ちカード | DeckSlack |
+|---|---|---|---:|
+| ミラ | `easy` | glimmouse coglet emberkit bolthare frostnewt rivetcrab pyxmoth | 2 |
+| オルド | `easy/noise=90/blind=20` | dustwisp scalefry mirelamp frostnewt gearowl stonetoad hollowshade | 2 |
+| ガーネット | `normal` | bolthare lynxlight cinderdrake velahound clockwyrm voltsparrow emberscale lupusfang | 3 |
+| リーフ | `normal` | gearowl hollowshade stonetoad tidewraith marshwyvern orreryx corvusarc | 3 |
+| ピアとピオ | `normal` | lynxlight cinderdrake clockwyrm voltsparrow gloamveil ironcetus rimeloom | 3 |
+| セレスト | `normal/depth=4/nodes=60000/worlds=4/noise=25` | velahound tidewraith lupusfang emberscale aquilaburst lanternmare serpenscoil draconyx | 3 |
+| ノア | `normal/depth=4/nodes=60000/worlds=4/noise=25` | orreryx gloamveil corvusarc rimeloom aquilaburst auroraveil leomane | 3 |
+| ヴェイル | `hard/nodes=120000/worlds=6/noise=30` | lupusfang emberscale ironcetus lanternmare forgecolossus stormgear nocturnis | 3 |
+| アストラ | `hard` | （今と同じ） | 3 |
+| ジン | `hard/nodes=120000/worlds=6/noise=30` | forgecolossus auroraveil voltwyrm nocturnis orionmane cassiveil pegasion | 3 |
+| ローレル | `hard` | stormgear taurocrag gravelith scorpidrake polarion astrolabion ursamaw ophiwyrm | 3 |
+| イオ | `hard` | （今と同じ） | 3 |

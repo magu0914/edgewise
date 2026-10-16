@@ -33,6 +33,14 @@ namespace Edgewise.Sim
             if (s == "random") return new PlayerSpec("Random", null);
             var parts = s.Split('/');
             string name = parts[0];
+            if (name.StartsWith("opp.", StringComparison.Ordinal))
+            {
+                // 星図巡りの相手の AI（性格つき）
+                var opp = Edgewise.Core.Campaign.CampaignData.OpponentById(name.Substring(4))
+                    ?? throw new ArgumentException("unknown campaign opponent " + name);
+                if (parts.Length > 1) throw new ArgumentException("options are not supported for opp.*");
+                return new PlayerSpec(opp.Id + "(" + opp.Profile.Name + ")", opp.Profile);
+            }
             int nodes = -1;
             int at = name.IndexOf('@');
             if (at >= 0)

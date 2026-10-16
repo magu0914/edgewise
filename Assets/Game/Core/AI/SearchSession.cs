@@ -62,6 +62,24 @@ namespace Edgewise.Core.AI
     }
 
     /// <summary>
+    /// Open OFF のとき、相手の伏せ札の候補をどう作るか（決定化。DESIGN §5-1 / §12-6）。
+    /// </summary>
+    public enum CardPoolModel
+    {
+        /// <summary>
+        /// 両者のカードが重ならない前提（フリー対戦）。候補 = cardPool から自分の手札と盤上のカードを 1 枚ずつ除いたもの。
+        /// </summary>
+        Distinct = 0,
+
+        /// <summary>
+        /// 同じカードを両者が持ちうる（星図巡り）。候補 = cardPool（重複可）から「相手がすでに盤に出したカード」
+        /// （PlacedCard.PlacedBy が相手のもの）を 1 枚ずつ除いたもの。1 つの手札の中ではカード ID を重複させない。
+        /// cardPool に相手の公開済みの持ちカードを渡せば、見えている情報で候補を絞れる（ズルではない）。
+        /// </summary>
+        Shared = 1,
+    }
+
+    /// <summary>
     /// CPU の思考 1 回分（DESIGN §5-1）。Step(maxNodes) で少しずつ進められる反復深化 αβ。
     /// <code>
     /// var session = new SearchSession(state, me, AiProfile.Hard, seed, CardCatalog.All);
@@ -73,6 +91,7 @@ namespace Edgewise.Core.AI
     ///   重複なしで一様にサンプリングした K 個の世界をそれぞれ読み、各手の評価の平均（同点なら最善だった世界の数）で選ぶ。
     ///   相手の本当の手札（state の相手手札と、state.Cards にある相手のカード定義）は一切読まない。
     /// - Sudden Death はラウンドの終局まで読み、引き分けは 0。
+    /// - 性格（AiProfile.Personality、DESIGN §12-5）はルートの手の選択にだけ効く。null なら従来とまったく同じ。
     /// </summary>
     public sealed class SearchSession
     {
@@ -93,12 +112,17 @@ namespace Edgewise.Core.AI
         readonly Move[] _rootMoves;
         readonly int[] _staticOrder;
         readonly int[] _noise;
+        readonly int[] _bonus;
+        readonly bool _bonusAdditive;
+        readonly bool _bonusTieOnly;
+        readonly int _rootMarginExtra;
         readonly int _rootEmpties;
 
         // ---- 世界 ----
         readonly CardDef[] _myHand;
         readonly CardDef[] _oppHand;
         readonly CardDef[] _unseen;
+        readonly CardPoolModel _poolModel;
         readonly int _oppCount;
         readonly int _worldCount;
         int _worldIndex;
@@ -164,13 +188,13 @@ namespace Edgewise.Core.AI
         public bool Blind => _blind;
 
         public SearchSession(GameState state, Player me, AiProfile profile, long seed, IReadOnlyList<CardDef> cardPool = null,
-            SearchWorkspace workspace = null)
-            : this(state, me, profile, seed, cardPool, workspace, false)
+            SearchWorkspace workspace = null, CardPoolModel poolModel = CardPoolModel.Distinct)
+            : this(state, me, profile, seed, cardPool, workspace, false, poolModel)
         {
         }
 
         SearchSession(GameState state, Player me, AiProfile profile, long seed, IReadOnlyList<CardDef> cardPool,
-            SearchWorkspace workspace, bool analyze)
+            SearchWorkspace workspace, bool analyze, CardPoolModel poolModel)
         {
             _state = state ?? throw new ArgumentNullException(nameof(state));
             _profile = profile ?? throw new ArgumentNullException(nameof(profile));
@@ -181,6 +205,7 @@ namespace Edgewise.Core.AI
             _search = (workspace ?? new SearchWorkspace()).Search;
             _nodesAtStart = _search.Nodes;
             _rng = Rng.SeedToState(seed);
+            _poolModel = poolModel;
 
             // 乱数の消費順: 見落とし判定 → 各手のノイズ → 世界のサンプリング
             _blind = profile.BlindPercent > 0 && Rng.NextInt(_rng, 100, out _rng) < profile.BlindPercent;
@@ -206,7 +231,7 @@ namespace Edgewise.Core.AI
             {
                 if (cardPool == null) throw new ArgumentNullException(nameof(cardPool), "cardPool is required when Open is off");
                 _oppHand = null;
-                _unseen = UnseenCards(state, me, cardPool);
+                _unseen = poolModel == CardPoolModel.Shared ? UnseenCardsShared(state, me, cardPool) : UnseenCards(state, me, cardPool);
                 _worldCount = profile.Worlds;
             }
 
@@ -246,11 +271,30 @@ namespace Edgewise.Core.AI
             for (int i = 0; i < _rootCount; i++)
                 _rootMoves[i] = new Move(SearchBoard.SlotOf(_rootCodes[i]), SearchBoard.CellOf(_rootCodes[i]), SearchBoard.RotOf(_rootCodes[i]));
 
+            // 性格（解析のときは使わない）。null なら乱数の消費も含めて従来どおり
+            var personality = analyze ? null : profile.Personality;
+            int noiseWidth = profile.Noise + (personality != null ? personality.Volatility : 0);
             _noise = new int[_rootCount];
-            if (profile.Noise > 0)
+            if (noiseWidth > 0)
             {
-                for (int i = 0; i < _rootCount; i++) _noise[i] = Rng.NextInt(_rng, 2 * profile.Noise + 1, out _rng) - profile.Noise;
+                for (int i = 0; i < _rootCount; i++) _noise[i] = Rng.NextInt(_rng, 2 * noiseWidth + 1, out _rng) - noiseWidth;
             }
+            _bonus = new int[_rootCount];
+            if (personality != null && personality.HasMoveBonus)
+            {
+                int lo = int.MaxValue, hi = int.MinValue;
+                for (int i = 0; i < _rootCount; i++)
+                {
+                    _bonus[i] = personality.MoveBonus(state, _rootMoves[i], _blind);
+                    if (_bonus[i] < lo) lo = _bonus[i];
+                    if (_bonus[i] > hi) hi = _bonus[i];
+                }
+                _bonusTieOnly = profile.PersonalityAsTieBreak;
+                _bonusAdditive = !_bonusTieOnly;
+                // 足し算で選ぶときは、ボーナスで逆転しうる手の値が境界値（窓の外）にならないよう、ルートの窓を広げる
+                if (_bonusAdditive) _rootMarginExtra = hi - lo;
+            }
+            if (personality != null && personality.Volatility > 0) _rootMarginExtra += 2 * personality.Volatility;
 
             _order = new int[_rootCount];
             _lastValue = new int[_rootCount];
@@ -303,7 +347,7 @@ namespace Edgewise.Core.AI
         }
 
         /// <summary>me から見えていないカード（pool から、自分の手札と盤上のカードを 1 枚ずつ除いたもの。pool の順を保つ）。</summary>
-        static CardDef[] UnseenCards(GameState state, Player me, IReadOnlyList<CardDef> pool)
+        internal static CardDef[] UnseenCards(GameState state, Player me, IReadOnlyList<CardDef> pool)
         {
             var seen = new List<string>();
             foreach (var id in state.HandArray(me)) seen.Add(id);
@@ -388,15 +432,64 @@ namespace Edgewise.Core.AI
             _worldActive = true;
         }
 
-        int RootMargin => _analyze ? Inf : _profile.RootMargin;
+        int RootMargin => _analyze || _profile.RootMargin >= Inf - _rootMarginExtra ? Inf : _profile.RootMargin + _rootMarginExtra;
 
-        /// <summary>見えていないカードから相手の手札を重複なしで一様に抜き出す（部分 Fisher–Yates）。</summary>
+        /// <summary>
+        /// 星図巡り用の候補（CardPoolModel.Shared）: pool から、相手（me の相手）が盤に置いたカードを 1 枚ずつ除いたもの。
+        /// 自分の手札・自分が置いたカードは除かない（相手も同じカードを持ちうる）。pool の順を保つ。
+        /// </summary>
+        internal static CardDef[] UnseenCardsShared(GameState state, Player me, IReadOnlyList<CardDef> pool)
+        {
+            var opp = me.Opponent();
+            var placed = new List<string>();
+            foreach (var pc in state.BoardArray)
+            {
+                if (pc.HasValue && pc.Value.PlacedBy == opp) placed.Add(pc.Value.CardId);
+            }
+            var result = new List<CardDef>(pool.Count);
+            foreach (var def in pool)
+            {
+                int k = placed.IndexOf(def.Id);
+                if (k >= 0)
+                {
+                    placed.RemoveAt(k);
+                    continue;
+                }
+                result.Add(def);
+            }
+            return result.ToArray();
+        }
+
+        /// <summary>
+        /// 見えていないカードから相手の手札を重複なしで一様に抜き出す（部分 Fisher–Yates）。
+        /// Shared のときは、手札にすでにあるカード ID を引いたら候補から外して引き直す（1 つの手札の中で ID を重複させない）。
+        /// </summary>
         void SampleOpponentHand(List<CardDef> into)
         {
             var pool = (CardDef[])_unseen.Clone();
             int n = pool.Length;
+            bool distinctIds = _poolModel == CardPoolModel.Shared;
+            int start = 0;
             for (int i = 0; i < _oppCount; i++)
             {
+                bool drawn = false;
+                while (distinctIds && start < n)
+                {
+                    int j = start + Rng.NextInt(_rng, n - start, out _rng);
+                    var t = pool[start];
+                    pool[start] = pool[j];
+                    pool[j] = t;
+                    var pick = pool[start++];
+                    if (ContainsId(into, pick.Id)) continue;
+                    into.Add(pick);
+                    drawn = true;
+                    break;
+                }
+                if (distinctIds)
+                {
+                    if (!drawn) into.Add(pool.Length > 0 ? pool[Rng.NextInt(_rng, pool.Length, out _rng)] : _myHand[0]);
+                    continue;
+                }
                 if (i < n)
                 {
                     int j = i + Rng.NextInt(_rng, n - i, out _rng);
@@ -411,6 +504,15 @@ namespace Edgewise.Core.AI
                     into.Add(pool.Length > 0 ? pool[Rng.NextInt(_rng, pool.Length, out _rng)] : _myHand[0]);
                 }
             }
+        }
+
+        static bool ContainsId(List<CardDef> cards, string id)
+        {
+            for (int i = 0; i < cards.Count; i++)
+            {
+                if (cards[i].Id == id) return true;
+            }
+            return false;
         }
 
         void IterationCompleted()
@@ -515,7 +617,13 @@ namespace Edgewise.Core.AI
                 {
                     int i = _order[k];
                     if (!_partialDone[i]) continue;
-                    if (pb < 0 || _partialValue[i] + (withNoise ? _noise[i] : 0) > _partialValue[pb] + (withNoise ? _noise[pb] : 0)) pb = i;
+                    if (pb < 0) pb = i;
+                    else
+                    {
+                        int vi = _partialValue[i] + (withNoise ? _noise[i] + Bonus(i) : 0);
+                        int vb = _partialValue[pb] + (withNoise ? _noise[pb] + Bonus(pb) : 0);
+                        if (vi > vb || (vi == vb && withNoise && _bonusTieOnly && _bonus[i] > _bonus[pb])) pb = i;
+                    }
                 }
                 if (pb >= 0) return pb;
             }
@@ -525,8 +633,15 @@ namespace Edgewise.Core.AI
             {
                 int i = _staticOrder[k];
                 if (_cnt[i] == 0) continue;
-                int v = Average(i) + (withNoise ? _noise[i] : 0);
-                if (best < 0 || v > bestValue || (v == bestValue && _votes[i] > _votes[best]))
+                int v = Average(i) + (withNoise ? _noise[i] + Bonus(i) : 0);
+                bool better = best < 0 || v > bestValue;
+                if (!better && v == bestValue)
+                {
+                    // 性格（Hard）: 評価がちょうど同じ手の間では性格の好みを優先する（世界の票より先。Open ON では票は 1 手にしか入らないため）
+                    if (withNoise && _bonusTieOnly && _bonus[i] != _bonus[best]) better = _bonus[i] > _bonus[best];
+                    else better = _votes[i] > _votes[best];
+                }
+                if (better)
                 {
                     best = i;
                     bestValue = v;
@@ -560,7 +675,8 @@ namespace Edgewise.Core.AI
                     // 引き分けなら正確に 0 の手だけ。負けなら負けが確定している手（上界が負でもよい）
                     bool sameClass = bestValue == 0 ? v == 0 && _wx[solvedBase + i] : v < 0;
                     if (!sameClass) continue;
-                    if (_wv[shallowBase + i] > _wv[shallowBase + choice]) choice = i;
+                    if (_wv[shallowBase + i] > _wv[shallowBase + choice]
+                        || (_bonusTieOnly && _wv[shallowBase + i] == _wv[shallowBase + choice] && _bonus[i] > _bonus[choice])) choice = i;
                 }
                 return choice;
             }
@@ -574,7 +690,7 @@ namespace Edgewise.Core.AI
                 int i = _staticOrder[k];
                 if (_cnt[i] != _cnt[best] || Average(i) != bestAvg) continue;
                 long s = ShallowSum(i, t);
-                if (s > choiceShallow)
+                if (s > choiceShallow || (_bonusTieOnly && s == choiceShallow && _bonus[i] > _bonus[choice]))
                 {
                     choice = i;
                     choiceShallow = s;
@@ -584,6 +700,9 @@ namespace Edgewise.Core.AI
         }
 
         int Average(int i) => FloorDiv(_sum[i], _cnt[i]);
+
+        /// <summary>性格のボーナスのうち評価に足す分（足し算で選ぶ性格のときだけ）。</summary>
+        int Bonus(int i) => _bonusAdditive ? _bonus[i] : 0;
 
         long ShallowSum(int i, int depth)
         {
@@ -657,25 +776,25 @@ namespace Edgewise.Core.AI
 
         /// <summary>終わるまで読んで手を返す（Sim・テスト用）。</summary>
         public static Move ChooseMove(GameState state, Player me, AiProfile profile, long seed, IReadOnlyList<CardDef> cardPool = null,
-            SearchWorkspace workspace = null) =>
-            new SearchSession(state, me, profile, seed, cardPool, workspace).Run();
+            SearchWorkspace workspace = null, CardPoolModel poolModel = CardPoolModel.Distinct) =>
+            new SearchSession(state, me, profile, seed, cardPool, workspace, poolModel).Run();
 
         /// <summary>
         /// 解析 API（DESIGN §5-1）: 合法手ごとの評価値と「読み切ったか」を返す（GameEngine.LegalMoves の順）。
         /// Hard と同じ探索で、ルートの全手を正確に評価する。viewer は手番のプレイヤー。Open OFF なら決定化を使い、相手の手札を盗み見ない。
         /// </summary>
         public static MoveEvaluation[] AnalyzeMoves(GameState state, Player viewer, int budgetNodes, IReadOnlyList<CardDef> cardPool = null,
-            long seed = 0, SearchWorkspace workspace = null)
+            long seed = 0, SearchWorkspace workspace = null, CardPoolModel poolModel = CardPoolModel.Distinct)
         {
-            var session = CreateAnalysis(state, viewer, AiProfile.Hard.WithMaxNodes(budgetNodes), seed, cardPool, workspace);
+            var session = CreateAnalysis(state, viewer, AiProfile.Hard.WithMaxNodes(budgetNodes), seed, cardPool, workspace, poolModel);
             session.Run();
             return session.GetEvaluations();
         }
 
         /// <summary>解析用のセッション（全手を正確に評価する。Step で少しずつ進められる）。</summary>
         public static SearchSession CreateAnalysis(GameState state, Player viewer, AiProfile profile, long seed,
-            IReadOnlyList<CardDef> cardPool = null, SearchWorkspace workspace = null) =>
-            new SearchSession(state, viewer, profile, seed, cardPool, workspace, true);
+            IReadOnlyList<CardDef> cardPool = null, SearchWorkspace workspace = null, CardPoolModel poolModel = CardPoolModel.Distinct) =>
+            new SearchSession(state, viewer, profile, seed, cardPool, workspace, true, poolModel);
 
         /// <summary>終局の評価値からスコア差（手番側 − 相手）を復元する。途中局面の評価値なら false。</summary>
         public static bool TryDecodeTerminalValue(int value, out int diff)

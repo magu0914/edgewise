@@ -97,7 +97,16 @@ namespace Edgewise.Sim
             new RulePreset("all-openoff-nopivot", "All except Pivot (Open OFF)",
                 new RuleSet(open: false, random: true, same: true, sameWall: true, plus: true, combo: true, elemental: true, suddenDeath: true)),
             new RulePreset("suddendeath", "Sudden Death (Open)", new RuleSet(open: true, suddenDeath: true)),
+            Region(1), Region(2), Region(3), Region(4),
         };
+
+        /// <summary>星図巡りの星域のルール（Pivot トークンはゲーム本体の既定値）。</summary>
+        static RulePreset Region(int number)
+        {
+            var r = Edgewise.Core.Campaign.CampaignData.Regions[number - 1];
+            var t = GameConstants.MatchPivotTokens(r.Rules);
+            return new RulePreset("region" + number, "Region " + number + " " + r.Id, r.Rules, t.First, t.Second);
+        }
 
         /// <summary>「basic,spc」のようなカンマ区切り。"default" は BALANCE.md の 4 条件。</summary>
         public static List<RulePreset> Parse(string list)

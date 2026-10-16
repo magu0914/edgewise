@@ -101,6 +101,7 @@ namespace Edgewise.Core.Tests.Engine
             Assert.That(files, Does.Contain("Engine/GameEngine.Apply.cs"));
             Assert.That(files, Does.Contain("Data/CardCatalog.cs"));
             Assert.That(files, Does.Contain("AI/SearchSession.cs"));
+            Assert.That(files, Does.Contain("Campaign/CampaignSave.cs"));
             Assert.That(files.Count, Is.GreaterThanOrEqualTo(10));
         }
 
@@ -138,7 +139,7 @@ namespace Edgewise.Core.Tests.Engine
             var allowed = new HashSet<string>
             {
                 "System", "System.Collections", "System.Collections.Generic", "System.Collections.ObjectModel", "System.Globalization",
-                "System.Text", "Edgewise.Core", "Edgewise.Core.Data",
+                "System.Text", "Edgewise.Core", "Edgewise.Core.Data", "Edgewise.Core.AI", "Edgewise.Core.Campaign",
             };
             var usingRe = new Regex(@"^\s*using\s+(static\s+)?([\w.]+)\s*;", RegexOptions.Multiline);
             foreach (var (file, code) in CoreSources.Load())
@@ -162,11 +163,13 @@ namespace Edgewise.Core.Tests.Engine
         {
             // 1) Core の型に可変な static フィールドがない（コンパイラ生成型は除く）
             var coreTypes = typeof(GameEngine).Assembly.GetTypes()
-                .Where(t => t.Namespace != null && (t.Namespace == "Edgewise.Core" || t.Namespace == "Edgewise.Core.Data" || t.Namespace == "Edgewise.Core.AI"))
+                .Where(t => t.Namespace != null && (t.Namespace == "Edgewise.Core" || t.Namespace == "Edgewise.Core.Data" || t.Namespace == "Edgewise.Core.AI"
+                    || t.Namespace == "Edgewise.Core.Campaign"))
                 .Where(t => !t.Name.Contains("<") && !(t.DeclaringType?.Name.Contains("<") ?? false))
                 .ToList();
             Assert.That(coreTypes, Has.Member(typeof(GameEngine)));
             Assert.That(coreTypes, Has.Member(typeof(Edgewise.Core.AI.SearchSession)));
+            Assert.That(coreTypes, Has.Member(typeof(Edgewise.Core.Campaign.CampaignRules)));
             foreach (var t in coreTypes)
             {
                 foreach (var f in t.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))

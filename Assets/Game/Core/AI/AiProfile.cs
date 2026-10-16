@@ -22,7 +22,7 @@ namespace Edgewise.Core.AI
         /// <summary>反復深化 αβ ＋置換表＋手順序付け。残り手数が少なければ終局まで読み切る。</summary>
         public static readonly AiProfile Hard = new AiProfile(
             "Hard", maxNodes: 400000, maxDepth: 0, worlds: 8, noise: 0, blindPercent: 0, rootMargin: 150, tableBits: 18,
-            tieBreakDepth: 2);
+            tieBreakDepth: 2, personalityAsTieBreak: true);
 
         /// <summary>表示名。</summary>
         public string Name { get; }
@@ -60,8 +60,16 @@ namespace Edgewise.Core.AI
         /// <summary>評価関数の重み。</summary>
         public EvalWeights Weights { get; }
 
+        /// <summary>性格（DESIGN §12-5）。null なら性格なし（従来とまったく同じ手を選ぶ）。</summary>
+        public AiPersonality Personality { get; }
+
+        /// <summary>
+        /// 性格を「評価がちょうど同じ手の間の好み」としてだけ使うか（Hard）。false なら性格のボーナスを評価に足して選ぶ（Easy / Normal）。
+        /// </summary>
+        public bool PersonalityAsTieBreak { get; }
+
         public AiProfile(string name, int maxNodes, int maxDepth, int worlds, int noise, int blindPercent, int rootMargin, int tableBits,
-            EvalWeights weights = null, int tieBreakDepth = 0)
+            EvalWeights weights = null, int tieBreakDepth = 0, AiPersonality personality = null, bool personalityAsTieBreak = false)
         {
             if (maxNodes < 1) throw new ArgumentOutOfRangeException(nameof(maxNodes));
             if (maxDepth < 0) throw new ArgumentOutOfRangeException(nameof(maxDepth));
@@ -81,31 +89,39 @@ namespace Edgewise.Core.AI
             Weights = weights ?? EvalWeights.Default;
             if (tieBreakDepth < 0) throw new ArgumentOutOfRangeException(nameof(tieBreakDepth));
             TieBreakDepth = tieBreakDepth;
+            Personality = personality;
+            PersonalityAsTieBreak = personalityAsTieBreak;
         }
 
-        public AiProfile WithMaxNodes(int maxNodes) =>
-            new AiProfile(Name, maxNodes, MaxDepth, Worlds, Noise, BlindPercent, RootMargin, TableBits, Weights, TieBreakDepth);
+        AiProfile Copy(string name = null, int? maxNodes = null, int? maxDepth = null, int? worlds = null, int? noise = null,
+            int? blindPercent = null, int? rootMargin = null, EvalWeights weights = null, int? tieBreakDepth = null) =>
+            new AiProfile(name ?? Name, maxNodes ?? MaxNodes, maxDepth ?? MaxDepth, worlds ?? Worlds, noise ?? Noise,
+                blindPercent ?? BlindPercent, rootMargin ?? RootMargin, TableBits, weights ?? Weights, tieBreakDepth ?? TieBreakDepth,
+                Personality, PersonalityAsTieBreak);
 
-        public AiProfile WithWorlds(int worlds) =>
-            new AiProfile(Name, MaxNodes, MaxDepth, worlds, Noise, BlindPercent, RootMargin, TableBits, Weights, TieBreakDepth);
+        public AiProfile WithMaxNodes(int maxNodes) => Copy(maxNodes: maxNodes);
 
-        public AiProfile WithMaxDepth(int maxDepth) =>
-            new AiProfile(Name, MaxNodes, maxDepth, Worlds, Noise, BlindPercent, RootMargin, TableBits, Weights, TieBreakDepth);
+        public AiProfile WithWorlds(int worlds) => Copy(worlds: worlds);
 
-        public AiProfile WithNoise(int noise, int blindPercent) =>
-            new AiProfile(Name, MaxNodes, MaxDepth, Worlds, noise, blindPercent, RootMargin, TableBits, Weights, TieBreakDepth);
+        public AiProfile WithMaxDepth(int maxDepth) => Copy(maxDepth: maxDepth);
 
-        public AiProfile WithRootMargin(int rootMargin) =>
-            new AiProfile(Name, MaxNodes, MaxDepth, Worlds, Noise, BlindPercent, rootMargin, TableBits, Weights, TieBreakDepth);
+        public AiProfile WithNoise(int noise, int blindPercent) => Copy(noise: noise, blindPercent: blindPercent);
 
-        public AiProfile WithWeights(EvalWeights weights) =>
-            new AiProfile(Name, MaxNodes, MaxDepth, Worlds, Noise, BlindPercent, RootMargin, TableBits, weights, TieBreakDepth);
+        public AiProfile WithRootMargin(int rootMargin) => Copy(rootMargin: rootMargin);
 
-        public AiProfile WithTieBreakDepth(int depth) =>
-            new AiProfile(Name, MaxNodes, MaxDepth, Worlds, Noise, BlindPercent, RootMargin, TableBits, Weights, depth);
+        public AiProfile WithWeights(EvalWeights weights) => Copy(weights: weights ?? throw new ArgumentNullException(nameof(weights)));
 
-        public AiProfile WithName(string name) =>
-            new AiProfile(name, MaxNodes, MaxDepth, Worlds, Noise, BlindPercent, RootMargin, TableBits, Weights, TieBreakDepth);
+        public AiProfile WithTieBreakDepth(int depth) => Copy(tieBreakDepth: depth);
+
+        public AiProfile WithName(string name) => Copy(name: name ?? throw new ArgumentNullException(nameof(name)));
+
+        /// <summary>性格を付け替えた版（null で性格なし）。asTieBreak は PersonalityAsTieBreak。</summary>
+        public AiProfile WithPersonality(AiPersonality personality, bool asTieBreak) =>
+            new AiProfile(Name, MaxNodes, MaxDepth, Worlds, Noise, BlindPercent, RootMargin, TableBits, Weights, TieBreakDepth,
+                personality, asTieBreak);
+
+        /// <summary>性格を付け替えた版（PersonalityAsTieBreak は今の値のまま）。</summary>
+        public AiProfile WithPersonality(AiPersonality personality) => WithPersonality(personality, PersonalityAsTieBreak);
 
         /// <summary>名前（easy / normal / hard、大文字小文字は無視）から既定のプロファイルを返す。</summary>
         public static AiProfile FromName(string name)
@@ -122,7 +138,8 @@ namespace Edgewise.Core.AI
         public override string ToString() =>
             Name + "(nodes " + MaxNodes + ", depth " + (MaxDepth == 0 ? "inf" : MaxDepth.ToString(System.Globalization.CultureInfo.InvariantCulture))
             + ", worlds " + Worlds + (TieBreakDepth > 0 ? ", tiebreak " + TieBreakDepth : "") + ", noise " + Noise + ", blind " + BlindPercent + "%, margin " + RootMargin + ", tt 2^" + TableBits
-            + (ReferenceEquals(Weights, EvalWeights.Default) ? "" : ", eval {" + Weights + "}") + ")";
+            + (ReferenceEquals(Weights, EvalWeights.Default) ? "" : ", eval {" + Weights + "}")
+            + (Personality == null ? "" : ", personality " + Personality + (PersonalityAsTieBreak ? " (tie-break)" : "")) + ")";
     }
 
     /// <summary>探索・評価で共有する定数。</summary>

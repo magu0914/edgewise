@@ -108,16 +108,25 @@ namespace Edgewise.Core
         /// <summary>時計回りの 90° 単位（0..3）。1 = 90°（元の left が top に来る）。</summary>
         public readonly int Rotation;
 
-        public PlacedCard(CardDef card, Player owner, int rotation)
+        /// <summary>
+        /// このカードを盤に置いたプレイヤー（裏返っても変わらない）。両者が見ている公開情報で、
+        /// AI の決定化（星図巡りでは同じカードを両者が持ちうる。DESIGN §12-6）が「相手がもう出したカード」を知るために使う。
+        /// 局面の同一性（Equals・hashState）には含めない（TS 版とのゴールデン互換のため）。
+        /// </summary>
+        public readonly Player PlacedBy;
+
+        /// <summary>placedBy を省略すると owner（置いた直後の状態）とみなす。</summary>
+        public PlacedCard(CardDef card, Player owner, int rotation, Player? placedBy = null)
         {
             Card = card ?? throw new ArgumentNullException(nameof(card));
             Owner = owner;
             Rotation = rotation;
+            PlacedBy = placedBy ?? owner;
         }
 
         public string CardId => Card.Id;
 
-        public PlacedCard WithOwner(Player owner) => new PlacedCard(Card, owner, Rotation);
+        public PlacedCard WithOwner(Player owner) => new PlacedCard(Card, owner, Rotation, PlacedBy);
 
         public bool Equals(PlacedCard other) =>
             Owner == other.Owner && Rotation == other.Rotation && Card.Id == other.Card.Id;

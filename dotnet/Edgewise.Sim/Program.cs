@@ -21,6 +21,13 @@ namespace Edgewise.Sim
     ///     --threads T        並列数（既定 = 論理コア数）。結果はスレッド数によらず同じ（時間の計測値を除く）
     ///     --out PATH         Markdown を PATH にも書き出す
     ///     --bench            ApplyMove と AI 探索の速度を測る
+    ///     --campaign         星図巡りの進行バランス（DESIGN §12-9）。相手ごとに標準的な手持ちの最善デッキで対戦させる（--deals は相手ごとの配牌数）
+    ///       --picks K        標準的な手持ち: それより前の相手 1 人につき何枚もらった想定か（既定 1）
+    ///       --player SPEC    プレイヤー役の AI（既定 normal。--match と同じ書式）
+    ///       --only IDS       計測する相手の ID（カンマ区切り）
+    ///       --tune SPEC      調整用の上書き "ID:ai=normal/noise=60;cards=a+b+c;slack=2|ID2:..."（CampaignSim.Effective）
+    ///   --match では "opp.<相手の ID>"（例 opp.harbor-master）で星図巡りの相手の AI（性格つき）を指定できる。
+    ///   --rules の region1〜region4 は星図巡りの星域のルール（Pivot トークンはゲーム本体の既定）。
     /// </summary>
     public static class Program
     {
@@ -34,6 +41,11 @@ namespace Edgewise.Sim
             int threads = Environment.ProcessorCount;
             string outPath = null;
             bool bench = false;
+            bool campaign = false;
+            int picks = 1;
+            string player = "normal";
+            string only = null;
+            string tune = null;
             try
             {
                 for (int i = 0; i < args.Length; i++)
@@ -58,6 +70,11 @@ namespace Edgewise.Sim
                         case "--threads": threads = int.Parse(Next(), CultureInfo.InvariantCulture); break;
                         case "--out": outPath = Next(); break;
                         case "--bench": bench = true; break;
+                        case "--campaign": campaign = true; break;
+                        case "--picks": picks = int.Parse(Next(), CultureInfo.InvariantCulture); break;
+                        case "--player": player = Next(); break;
+                        case "--only": only = Next(); break;
+                        case "--tune": tune = Next(); break;
                         default: throw new ArgumentException("unknown option " + a);
                     }
                 }
@@ -65,7 +82,7 @@ namespace Edgewise.Sim
             catch (Exception e) when (e is ArgumentException || e is FormatException)
             {
                 Console.Error.WriteLine(e.Message);
-                Console.Error.WriteLine("usage: Edgewise.Sim [--match A:B[,C:D]] [--rules LIST] [--pivot F/S[,F/S]] [--deals N | --games N] [--seed S] [--threads T] [--out PATH] [--bench]");
+                Console.Error.WriteLine("usage: Edgewise.Sim [--match A:B[,C:D]] [--rules LIST] [--pivot F/S[,F/S]] [--deals N | --games N] [--seed S] [--threads T] [--out PATH] [--bench] [--campaign [--picks K] [--player SPEC] [--only IDS]]");
                 return 2;
             }
 
@@ -73,6 +90,18 @@ namespace Edgewise.Sim
             {
                 Bench.Run();
                 return 0;
+            }
+            if (campaign)
+            {
+                try
+                {
+                    return CampaignSim.Run(deals, seed, threads, picks, player, only, tune, outPath, args);
+                }
+                catch (ArgumentException e)
+                {
+                    Console.Error.WriteLine(e.Message);
+                    return 2;
+                }
             }
             if (matches.Count == 0) matches.Add((PlayerSpec.Parse("random"), PlayerSpec.Parse("random")));
 
