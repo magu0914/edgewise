@@ -92,13 +92,21 @@ namespace Edgewise.Core.Campaign
         /// <summary>この結果で初めて主に勝った（星域を抜けた）か。台詞 RegionClear を出す。</summary>
         public bool ClearedRegion { get; }
 
-        public MatchApplication(CampaignState state, string takenCard, string protectedCard, Region unlockedRegion, bool clearedRegion)
+        /// <summary>
+        /// この結果で初めて最後の星域の主に勝った（星図をすべて巡り終えた）か。エンディング（CampaignData.Ending → クレジット）を出す。
+        /// 2 回目以降の勝利では false（ClearedRegion と同じく、主への初勝利でだけ立つ）。
+        /// </summary>
+        public bool CompletedJourney { get; }
+
+        public MatchApplication(CampaignState state, string takenCard, string protectedCard, Region unlockedRegion, bool clearedRegion,
+            bool completedJourney = false)
         {
             State = state;
             TakenCard = takenCard;
             ProtectedCard = protectedCard;
             UnlockedRegion = unlockedRegion;
             ClearedRegion = clearedRegion;
+            CompletedJourney = clearedRegion && completedJourney;
         }
     }
 
@@ -127,6 +135,20 @@ namespace Edgewise.Core.Campaign
             var col = new Dictionary<string, int>();
             foreach (var id in CampaignData.StarterCards) col[id] = col.TryGetValue(id, out int n) ? n + 1 : 1;
             return new CampaignState(seed, classicMode, col, new[] { CampaignData.Regions[0].Id }, null, null);
+        }
+
+        /// <summary>
+        /// 再戦か: その相手と 1 度でも対戦したことがある（勝ち・負け・引き分けのどれか。セーブの勝敗数で判定するので形式は変わらない）。
+        /// 対戦前（ApplyMatch の前）の進行を渡すこと。
+        /// </summary>
+        public static bool IsRematch(CampaignState state, Opponent opponent) =>
+            state != null && opponent != null && state.Record(opponent.Id).Games > 0;
+
+        /// <summary>対戦前の登場の台詞: 初回は Intro（ルールの手ほどきつき）、2 回目以降は Rematch。</summary>
+        public static IReadOnlyList<string> IntroLines(CampaignState state, Opponent opponent)
+        {
+            if (opponent == null) throw new ArgumentNullException(nameof(opponent));
+            return IsRematch(state, opponent) ? opponent.Lines.Rematch : opponent.Lines.Intro;
         }
 
         /// <summary>その相手と対戦できるか（相手の星域が解放済み）。</summary>
@@ -542,7 +564,8 @@ namespace Edgewise.Core.Campaign
                 .WithRecord(opponent.Id, new OpponentRecord(wins, losses, draws, captured, seen));
             if (region != null && playerDeck != null && playerDeck.Count == DeckSize)
                 next0 = next0.WithLastDeck(region.Id, new ReadOnlyCollection<string>(new List<string>(playerDeck)));
-            return new MatchApplication(next0, taken, guarded, unlocked, cleared);
+            bool completed = cleared && region != null && CampaignData.NextRegion(region) == null;
+            return new MatchApplication(next0, taken, guarded, unlocked, cleared, completed);
         }
 
         /// <summary>

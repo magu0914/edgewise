@@ -136,6 +136,7 @@ namespace Edgewise.Game.UI
         public const string DexTribe = "系統";
         public const string DexNone = "なし";
         public const string DexIcon = "アイコン";
+        public const string DexCreditHidden = "入手すると表示されます";
         public const string DexLevel = "Lv";
         public const string TribeBeastName = "獣";
         public const string TribeMachineName = "機械";
@@ -257,6 +258,12 @@ namespace Edgewise.Game.UI
 
         public const string ClearedSuffix = " を巡り終えた";
         public const string ClearedAll = "星図をすべて巡り終えた！";
+
+        // エンディング（5c。本文は Core の CampaignData.Ending）
+        public const string EndingHeading = "星図巡り";
+        public const string EndingNext = "タップで次へ";
+        public const string CreditsThanks = "最後まで遊んでくれて、ありがとう。";
+        public const string CreditsRollSkip = "スキップ";
 
         public const string SettingsTabBasic = "基本";
         public const string SettingsTabCampaign = "星図巡り";

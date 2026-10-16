@@ -31,6 +31,7 @@ namespace Edgewise.Game.Campaign
         [SerializeField] DialogueBox dialogue;
         [SerializeField] RewardScreen reward;
         [SerializeField] ClearedBand cleared;
+        [SerializeField] EndingScreen ending;
 
         CampaignSession _session;
         CampaignFlow _flow;
@@ -38,7 +39,9 @@ namespace Edgewise.Game.Campaign
         Edgewise.Game.Match.MatchOutcome _matchOutcome;
         string _notice;
         string[] _grants;
+        bool _unlockAll;
         bool _initialized;
+        Coroutine _prewarm;
 
         /// <summary>
         /// テスト用: 対戦をせずに結果を決める（null なら実際に対戦する）。勝敗の注入に使う。
@@ -57,6 +60,7 @@ namespace Edgewise.Game.Campaign
         public DialogueBox Dialogue => dialogue;
         public RewardScreen Reward => reward;
         public ClearedBand Cleared => cleared;
+        public EndingScreen Ending => ending;
 
         /// <summary>結果画面の「次へ」を待っているか（テスト用）。</summary>
         public bool ResultWaiting { get; private set; }
@@ -64,7 +68,8 @@ namespace Edgewise.Game.Campaign
         /// <summary>今の段階の演出（会話・対戦・報酬など）が動いているか。</summary>
         public bool Busy { get; private set; }
 
-        public void Wire(AppFlow flow, StarMapScreen m, RegionScreen r, DeckEditScreen d, DialogueBox dlg, RewardScreen rw, ClearedBand band)
+        public void Wire(AppFlow flow, StarMapScreen m, RegionScreen r, DeckEditScreen d, DialogueBox dlg, RewardScreen rw, ClearedBand band,
+            EndingScreen end)
         {
             app = flow;
             map = m;
@@ -73,18 +78,29 @@ namespace Edgewise.Game.Campaign
             dialogue = dlg;
             reward = rw;
             cleared = band;
+            ending = end;
         }
 
         // ------------------------------------------------------------------
         // 準備（AppFlow.Awake から URL を読んだ後に呼ぶ）
         // ------------------------------------------------------------------
 
-        /// <summary>セーブを読み込む。grants は URL の ?grant=（自動操作・撮影用。新しく始めたときに手持ちへ足す）。</summary>
-        public void Initialize(string[] grants = null)
+        /// <summary>
+        /// セーブを読み込む。grants は URL の ?grant=（自動操作・撮影用。新しく始めたときに手持ちへ足す）。
+        /// unlockAll は ?unlock=all（新しく始めたときに全星域を開く）、forceWin は ?forcewin=相手ID（その相手との対戦を勝ちとして注入する）。
+        /// どちらも撮影・E2E 用で、?log と一緒のときだけ AppFlow が渡す。
+        /// </summary>
+        public void Initialize(string[] grants = null, bool unlockAll = false, string forceWin = null)
         {
             if (_initialized) return;
             _initialized = true;
             _grants = grants;
+            _unlockAll = unlockAll;
+            if (!string.IsNullOrEmpty(forceWin))
+            {
+                MatchOverride = f => f.Opponent != null && f.Opponent.Id == forceWin ? new CampaignOutcome(MatchResultKind.Win, false) : (CampaignOutcome?)null;
+                Debug.LogWarning("[Edgewise] debug force win: " + forceWin);
+            }
             _session = new CampaignSession(CampaignStores.Create(), NewSeed);
             var r = _session.Load();
             if (r.Status == SaveLoadStatus.Corrupt) _notice = UiText.SaveCorrupt;
@@ -160,6 +176,7 @@ namespace Edgewise.Game.Campaign
             dialogue.gameObject.SetActive(false);
             reward.Hide();
             cleared.gameObject.SetActive(false);
+            if (ending != null) ending.gameObject.SetActive(false);
         }
 
         /// <summary>星図から開いた図鑑を閉じた: 星図に戻る。</summary>
@@ -241,6 +258,7 @@ namespace Edgewise.Game.Campaign
                     deck.Show(_flow.State, _flow.Region, _flow.Opponent, _flow.Deck);
                     break;
                 case CampaignStep.TalkBefore:
+                    if (AutomationLog.Enabled) AutomationLog.Write("talk " + (_flow.IsRematch ? "rematch " : "first ") + _flow.Opponent.Id);
                     RunTalk(next, () => _flow.StartMatch());
                     break;
                 case CampaignStep.Match:
@@ -264,7 +282,14 @@ namespace Edgewise.Game.Campaign
                 case CampaignStep.Cleared:
                     RunCleared();
                     break;
+                case CampaignStep.Ending:
+                    RunEnding();
+                    break;
+                case CampaignStep.EndCredits:
+                    RunEndCredits();
+                    break;
             }
+            if (next == CampaignStep.Map || next == CampaignStep.Region) StartPrewarm();
         }
 
         void ShowMap()
@@ -275,6 +300,28 @@ namespace Edgewise.Game.Campaign
             map.Show(_flow.State, _flow.Region, unlock, _notice);
             if (_session.LoadStatus != SaveLoadStatus.TooNew) _notice = null;
             if (unlock != null) RunUnlock(unlock);
+        }
+
+        /// <summary>
+        /// 星図・星域の画面にいる間に、デッキ編集の小さなカードを 1 フレームに 2 枚ずつ作っておく（5c。開いた直後のフレーム落ちを防ぐ）。
+        /// 一覧に要るのは手持ちの種類数まで。
+        /// </summary>
+        void StartPrewarm()
+        {
+            if (_prewarm != null || deck == null || _session == null) return;
+            _prewarm = StartCoroutine(Prewarm());
+        }
+
+        System.Collections.IEnumerator Prewarm()
+        {
+            while (true)
+            {
+                var s = Step;
+                if (s != CampaignStep.Map && s != CampaignStep.Region) break;
+                if (deck.PrewarmStep(_session.State.Collection.Count, 2)) break;
+                yield return null;
+            }
+            _prewarm = null;
         }
 
         /// <summary>
@@ -324,17 +371,26 @@ namespace Edgewise.Game.Campaign
         /// <summary>URL の ?grant=a,b,c（自動操作・撮影用）: 手持ちにカードを足して保存する。</summary>
         void ApplyGrants()
         {
-            if (_grants == null || _grants.Length == 0) return;
+            if ((_grants == null || _grants.Length == 0) && !_unlockAll) return;
             var col = new Dictionary<string, int>();
             foreach (var kv in _session.State.Collection) col[kv.Key] = kv.Value;
-            foreach (var id in _grants)
+            foreach (var id in _grants ?? Array.Empty<string>())
             {
                 if (string.IsNullOrEmpty(id) || !CardCatalog.ById.ContainsKey(id)) continue;
                 col[id] = (col.TryGetValue(id, out int n) ? n : 0) + 1;
             }
-            _session.Save(_session.State.WithCollection(col));
-            Debug.LogWarning("[Edgewise] debug grant: " + string.Join(",", _grants));
+            var state = _session.State.WithCollection(col);
+            if (_unlockAll)
+            {
+                var all = new List<string>();
+                foreach (var r in CampaignData.Regions) all.Add(r.Id);
+                state = state.WithUnlocked(all);
+                Debug.LogWarning("[Edgewise] debug unlock: all regions");
+            }
+            _session.Save(state);
+            if (_grants != null) Debug.LogWarning("[Edgewise] debug grant: " + string.Join(",", _grants));
             _grants = null;
+            _unlockAll = false;
             if (_flow.Step == CampaignStep.Map) map.Show(_flow.State, _flow.Region);
         }
 
@@ -472,6 +528,23 @@ namespace Edgewise.Game.Campaign
             app.HideAll();
             app.PlayBgm(BgmCue.Title);
             Run(ct => cleared.PlayAsync(_flow.ClearedRegion, _flow.PendingUnlock, Tf, ct), () => _flow.FinishCleared());
+        }
+
+        /// <summary>エンディングの文（最後の星域の主に初めて勝ったとき。5c）。</summary>
+        void RunEnding()
+        {
+            app.HideAll();
+            app.PlayBgm(BgmCue.Title);
+            Run(ct => ending.PlayAsync(CampaignData.Ending, Tf, ct), () => _flow.FinishEnding());
+        }
+
+        /// <summary>エンディングの後のクレジット（自動で流れる。スキップ可）→ 星図。後ろではタイトルの扇のカードが回る。</summary>
+        void RunEndCredits()
+        {
+            app.HideAll();
+            app.PlayBgm(BgmCue.Title);
+            app.Fan.Show();
+            Run(ct => app.Credits.PlayRollAsync(ct), () => _flow.FinishEndCredits());
         }
     }
 }

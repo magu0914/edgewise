@@ -377,7 +377,7 @@ namespace Edgewise.Game.UI
             var table = assets.cardArtTable;
             if (unknown)
             {
-                // 未入手: 名前・数字・属性は伏せる（シルエットとアイコンのクレジットだけ）
+                // 未入手: 名前・数字・属性は伏せる（シルエットだけ）。アイコンの名前からカード名が推測できるので、クレジットも伏せる（5c）
                 infoName.text = UiText.DexUnknownName;
                 infoMeta.text = UiText.DexNotOwned;
             }
@@ -387,7 +387,7 @@ namespace Edgewise.Game.UI
                 infoMeta.text = UiText.DexElement + "  " + ElementName(def.Element) + "　　" + UiText.DexTribe + "  " + TribeName(def.Tribe)
                     + (_collectionView ? "　　" + UiText.DexOwned + OwnedCount(def.Id) : "");
             }
-            infoCredit.text = UiText.DexIcon + ": " + (table != null ? table.CreditLine(def.Id) : "");
+            infoCredit.text = UiText.DexIcon + ": " + (unknown ? UiText.DexCreditHidden : table != null ? table.CreditLine(def.Id) : "");
             _pointerIdle = 99f;
             if (AutomationLog.Enabled)
             {

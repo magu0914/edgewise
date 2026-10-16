@@ -230,6 +230,103 @@ namespace Edgewise.Tests.PlayMode
             Assert.That(_camp.Region.CapText, Does.Contain("25"));
         }
 
+        /// <summary>
+        /// 5c: 最後の主（イオ）に初めて勝つ（勝敗を注入）→ 星域を抜けた台詞 → 帯 → エンディングの文 → クレジットが自動で流れる（スキップ）→ 星図。
+        /// もう一度勝っても、エンディングは流れない。2 回目の登場の会話は再戦用。
+        /// </summary>
+        [UnityTest]
+        public IEnumerator TheEndingPlaysOnlyOnTheFirstWinOverTheLastBoss()
+        {
+            var col = new System.Collections.Generic.Dictionary<string, int>();
+            foreach (var c in Edgewise.Core.Data.CardCatalog.All.Where(c => c.Level <= 9)) col[c.Id] = 1;
+            var start = CampaignRules.NewGame(9).WithCollection(col).WithUnlocked(CampaignData.Regions.Select(r => r.Id));
+            yield return Load(CampaignSave.ToJson(start));
+            _camp.MatchOverride = f => new CampaignOutcome(MatchResultKind.Win, false);
+            _app.Title.CampaignButton.onClick.Invoke();
+            var io = CampaignData.Regions[3].Boss;
+
+            // デッキ編集: 手持ち 45 種類が少しずつ並ぶ（作っておいた小さなカードを使う）
+            yield return WaitUntil(() => _camp.Step == CampaignStep.Map && !_camp.Busy, "map");
+            yield return WaitUntil(() => _camp.Deck.PooledItems >= col.Count, "the deck cards are made ahead on the map", 10f);
+            _camp.Map.Node(3).onClick.Invoke();
+            _camp.Region.ChallengeButton(2).onClick.Invoke();
+            Assert.That(_camp.Step, Is.EqualTo(CampaignStep.Deck));
+            Assert.That(_camp.Deck.Populating, Is.True, "the list is dealt over a few frames");
+            yield return WaitUntil(() => !_camp.Deck.Populating, "the list is complete", 5f);
+            Assert.That(_camp.Deck.Items.Count(i => i.gameObject.activeSelf), Is.EqualTo(col.Count));
+            _camp.Deck.Auto();
+            _camp.Deck.BeginButton.onClick.Invoke();
+            Assert.That(_camp.Flow.Opponent, Is.SameAs(io));
+            Assert.That(_camp.Flow.IsRematch, Is.False);
+            yield return WaitUntil(() => _camp.Dialogue.IsOpen, "intro dialogue");
+            Assert.That(_camp.Dialogue.BodyText, Is.EqualTo(io.Lines.Intro[0]));
+            _camp.Dialogue.Skip();
+
+            // 勝ち → 会話 → 報酬
+            yield return WaitUntil(() => _camp.Step == CampaignStep.TalkAfter && _camp.Dialogue.IsOpen, "after-match dialogue");
+            _camp.Dialogue.Skip();
+            yield return WaitUntil(() => _camp.Reward.WaitingForPick, "reward");
+            _camp.Reward.RequestPick(0);
+            yield return WaitUntil(() => _camp.Reward.WaitingForNext, "reward done");
+            _camp.Reward.Continue();
+            // 1. 主の「星域を抜けた」台詞
+            yield return WaitUntil(() => _camp.Step == CampaignStep.TalkClear && _camp.Dialogue.IsOpen, "region clear dialogue");
+            Assert.That(_camp.Dialogue.BodyText, Is.EqualTo(io.Lines.RegionClear[0]));
+            _camp.Dialogue.Skip();
+            // 2. 帯
+            yield return WaitUntil(() => _camp.Step == CampaignStep.Cleared && _camp.Cleared.IsOpen, "cleared band");
+            Assert.That(_camp.Cleared.Text, Is.EqualTo("星界の門 を巡り終えた"));
+            _camp.Cleared.Skip();
+            // 3. エンディングの文
+            yield return WaitUntil(() => _camp.Step == CampaignStep.Ending && _camp.Ending.WaitingForNext, "ending text");
+            Assert.That(_camp.Ending.LineCount, Is.EqualTo(CampaignData.Ending.Count));
+            for (int i = 0; i < CampaignData.Ending.Count; i++)
+            {
+                Assert.That(_camp.Ending.LineText(i), Is.EqualTo(CampaignData.Ending[i]));
+                Assert.That(_camp.Ending.LineAlpha(i), Is.EqualTo(1f).Within(0.001f));
+            }
+            _camp.Ending.Advance();
+            // 4. クレジットが自動で流れる（スキップ可）
+            yield return WaitUntil(() => _camp.Step == CampaignStep.EndCredits && _app.Credits.IsRolling, "credits roll");
+            Assert.That(_app.Credits.IsOpen, Is.True);
+            Assert.That(_app.Credits.Body, Does.Contain("ありがとう"));
+            float p0 = _app.Credits.RollProgress;
+            yield return new WaitForSecondsRealtime(2.5f);
+            Assert.That(_app.Credits.RollProgress, Is.GreaterThan(p0), "the credits scroll by themselves");
+            Assert.That(_app.Credits.IsRolling, Is.True, "slowly");
+            _app.Credits.CloseButton.onClick.Invoke(); // 「スキップ」
+            // 5. 星図へ
+            yield return WaitUntil(() => _camp.Step == CampaignStep.Map && !_camp.Busy, "map after the credits");
+            Assert.That(_app.Credits.IsOpen, Is.False);
+            Assert.That(_app.Title.gameObject.activeSelf, Is.False, "not the title: the journey goes on");
+            Assert.That(_camp.Map.IsOpen, Is.True);
+            Assert.That(CampaignSave.Load(_store.Json).State.Record(io.Id).Wins, Is.EqualTo(1));
+
+            // もう一度勝つ: 再戦の登場台詞、エンディングは流れない
+            var seen = new System.Collections.Generic.List<CampaignStep>();
+            _camp.Flow.StepChanged += (_, next) => seen.Add(next);
+            _camp.Map.Node(3).onClick.Invoke();
+            _camp.Region.ChallengeButton(2).onClick.Invoke();
+            _camp.Deck.Auto();
+            _camp.Deck.BeginButton.onClick.Invoke();
+            Assert.That(_camp.Flow.IsRematch, Is.True);
+            yield return WaitUntil(() => _camp.Dialogue.IsOpen, "rematch dialogue");
+            Assert.That(_camp.Dialogue.BodyText, Is.EqualTo(io.Lines.Rematch[0]));
+            _camp.Dialogue.Skip();
+            yield return WaitUntil(() => _camp.Step == CampaignStep.TalkAfter && _camp.Dialogue.IsOpen, "after-match dialogue 2");
+            _camp.Dialogue.Skip();
+            yield return WaitUntil(() => _camp.Reward.WaitingForPick, "reward 2");
+            _camp.Reward.RequestPick(0);
+            yield return WaitUntil(() => _camp.Reward.WaitingForNext, "reward 2 done");
+            _camp.Reward.Continue();
+            yield return WaitUntil(() => _camp.Step == CampaignStep.Map && !_camp.Busy, "map after the second win");
+            Assert.That(seen, Has.No.Member(CampaignStep.TalkClear));
+            Assert.That(seen, Has.No.Member(CampaignStep.Ending));
+            Assert.That(seen, Has.No.Member(CampaignStep.EndCredits));
+            Assert.That(_app.Credits.IsOpen, Is.False);
+            Assert.That(CampaignSave.Load(_store.Json).State.Record(io.Id).Wins, Is.EqualTo(2));
+        }
+
         /// <summary>原作モードで負ける（勝敗を注入）: 会話 → 取られる演出 → 星図。手持ちから 1 枚減り、相手の欄に「取」の印。</summary>
         [UnityTest]
         public IEnumerator ClassicModeLossTakesACardWithAShortScene()
@@ -289,6 +386,17 @@ namespace Edgewise.Tests.PlayMode
             yield return null;
             Assert.That(dex.ZoomCard.Unknown, Is.True);
             Assert.That(dex.InfoName, Is.EqualTo("？？？"), "the name and numbers are hidden");
+            // 5c: アイコンの名前からカード名が推測できるので、未入手のあいだはクレジットも伏せる
+            var leoCredit = _app.Assets.cardArtTable.CreditLine("leomane");
+            Assert.That(dex.InfoCredit, Does.Contain("入手すると表示されます"));
+            Assert.That(dex.InfoCredit, Does.Not.Contain(leoCredit));
+            Assert.That(dex.InfoCredit, Does.Not.Contain("CC BY"));
+            dex.BackToList();
+            // 持っているカードはクレジットを出す
+            dex.OpenZoom(glim);
+            yield return null;
+            Assert.That(dex.ZoomCard.Unknown, Is.False);
+            Assert.That(dex.InfoCredit, Does.Contain(_app.Assets.cardArtTable.CreditLine("glimmouse")));
             dex.BackToList();
             // 「すべて見る」で全カード
             dex.ViewButton.onClick.Invoke();

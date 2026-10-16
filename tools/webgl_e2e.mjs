@@ -1146,6 +1146,224 @@ async function run5b2() {
   results.fps = consoleLines.filter((l) => /^fps/.test(l.line)).map((l) => l.line);
 }
 
+// ---------------------------------------------------------------------------
+// Phase 5c: 台詞（初回・再戦）、エンディング（勝敗を注入）、図鑑の未入手カードのクレジット、デッキ編集の FPS（50 種類）。
+//   node tools/webgl_e2e.mjs --scenario 5c --serve Builds/WebGL --serve-port 8774 --out Logs/shots/5c
+// A（横・x2）: 新しく始める → 図鑑で未入手のカードを拡大（クレジットが伏せてある）→ ミラと 1 局（ヒントの手で勝つまで）→ 報酬
+//             → もう一度ミラに挑む（再戦の登場台詞）→ 設定でデータを消す。
+// B（横・x1・?grant=全カード&unlock=all&forcewin=gate-elder）: デッキ編集（手持ち 50 種類）の FPS を計る → イオに挑む（初回の台詞）
+//             → 勝ちを注入 → 報酬 → 主の台詞 → 帯 → エンディングの文 → クレジットが流れる → スキップ → 星図
+//             → もう一度イオに勝つ（再戦の台詞。エンディングは出ない）。
+// ---------------------------------------------------------------------------
+const ALL_CARDS = ['glimmouse', 'dustwisp', 'coglet', 'emberkit', 'scalefry', 'pyxmoth', 'bolthare', 'rivetcrab', 'frostnewt', 'mirelamp', 'lynxlight', 'gearowl',
+  'cinderdrake', 'hollowshade', 'stonetoad', 'velahound', 'clockwyrm', 'tidewraith', 'marshwyvern', 'voltsparrow', 'lupusfang', 'orreryx', 'gloamveil',
+  'emberscale', 'corvusarc', 'aquilaburst', 'ironcetus', 'lanternmare', 'serpenscoil', 'rimeloom', 'leomane', 'forgecolossus', 'auroraveil', 'draconyx',
+  'stormgear', 'cygnwraith', 'taurocrag', 'gravelith', 'voltwyrm', 'nocturnis', 'orionmane', 'astrolabion', 'cassiveil', 'scorpidrake', 'polarion',
+  'andromede', 'pegasion', 'ophiwyrm', 'sextantor', 'ursamaw'];
+
+/** 会話の line 行目（0 始まり）まで進めて撮る → スキップ。 */
+async function talkShot(from, shotName, line = 1) {
+  const d = await waitLine(/^dialogue 0\/(\d+)/, 20000, from);
+  const at = (await waitLine(/^screen Dialogue /, 5000, d.index)).index;
+  const n = +d.m[1];
+  const target = Math.min(line, n - 1);
+  for (let i = 0; i < target; i++) {
+    await sleep(900);
+    // 1 回目: 全文を出す、2 回目: 次の行へ
+    const b = consoleLines.length;
+    await key('Enter');
+    await sleep(150);
+    if (!consoleLines.slice(b).some((l) => new RegExp('^dialogue ' + (i + 1) + '/').test(l.line))) await key('Enter');
+    await waitLine(new RegExp('^dialogue ' + (i + 1) + '/'), 5000, b);
+  }
+  await sleep(1800);
+  await shot(shotName);
+  await clickUi('Dialogue', 'SkipButton', at);
+  const e = await waitLine(/^dialogue end/, 10000, d.index);
+  return e.index + 1;
+}
+
+/** 星図から: 星域 region → 相手 opp → デッキ（onDeck）→ 挑む。挑んだ時点のログ位置を返す。 */
+async function openDeck(region, opp, onDeck) {
+  const mapAt = await waitScreen('Map', Math.max(0, consoleLines.length - 400));
+  await sleep(600);
+  await clickUi('Map', 'Region' + region, mapAt);
+  const rAt = await waitScreen('Region', mapAt);
+  await sleep(500);
+  await clickUi('Region', 'Challenge' + opp, rAt);
+  let dAt = await waitScreen('Deck', rAt);
+  if (onDeck) dAt = await onDeck(dAt);
+  await waitLine(/^deck listed /, 10000, dAt);
+  await sleep(300);
+  dAt = lastLine(/^screen Deck /, dAt).index;
+  const ab = consoleLines.length;
+  await clickUi('Deck', 'AutoButton', dAt);
+  await waitLine(/^deck \S+ total \d+\/\d+ ready/, 5000, ab);
+  await sleep(300);
+  const talkFrom = consoleLines.length;
+  await clickUi('Deck', 'BeginButton', dAt);
+  return talkFrom;
+}
+
+async function run5c() {
+  results.matches = [];
+  results.rewards = [];
+  const checks = {};
+
+  // ---------------- A ----------------
+  let navAt = consoleLines.length;
+  await send('Page.navigate', { url: `${BASE}?log&seed=${SEED}&speed=x2` });
+  await waitLine(/^campaign load (\S+) nosave/, 120000, navAt);
+  await newGameIntro(navAt, {});
+  // 図鑑: 未入手のカードを拡大 → クレジットが伏せてある
+  {
+    const mAt = await waitScreen('Map', navAt, 30000);
+    await sleep(500);
+    await clickUi('Map', 'MapDexButton', mAt);
+    const dl = await waitLine(/^dex list (landscape|portrait)/, 10000, mAt);
+    await move(5, 5);
+    await sleep(900);
+    const cards = dexCards(Math.max(0, dl.index - 200));
+    const unknownId = Object.keys(cards).find((id) => !STARTER.includes(id) && cards[id].y > 140 && cards[id].y < 600);
+    const c = cards[unknownId];
+    const zb = consoleLines.length;
+    await click(c.x, c.y);
+    const z = await waitLine(/^dex zoom (\S+)( unknown)?/, 5000, zb);
+    checks.dexZoom = z.line;
+    await sleep(1000);
+    await shot('06_dex_unknown_zoom_credit_hidden');
+    await key('Escape');
+    await waitLine(/^dex list/, 5000, z.index);
+    await sleep(300);
+    await clickUi('Dex', 'DexBackButton', lastLine(/^screen Dex /).index);
+    await waitScreen('Map', z.index, 10000);
+  }
+  // ミラと 1 局（勝つまで。初回の台詞はルールの行で撮る）
+  let resAt = null;
+  for (let attempt = 1; attempt <= 4 && !resAt; attempt++) {
+    const talkFrom = await openDeck(1, 0, null);
+    const talk = await waitLine(/^talk (first|rematch) harbor-apprentice/, 10000, talkFrom);
+    if (attempt === 1) {
+      checks.firstTalk = talk.line;
+      await talkShot(talkFrom, '01_dialogue_first_mira', 1);
+    } else await skipDialogue(talkFrom, null);
+    await waitLine(/^campaign match /, 20000, talkFrom);
+    const r = await playHinted(null);
+    log(`match vs mira: ${r.score.join('-')} ${r.result} (${r.moves} moves)`);
+    results.matches.push({ opp: 'mira', score: r.score, result: r.result });
+    const rAt = await waitScreen('Result', r.index, 60000);
+    await sleep(600);
+    await clickUi('Result', 'NextButton', rAt);
+    if (r.result === 'p0') { resAt = rAt; break; }
+    const after = consoleLines.length;
+    if (r.result === 'p1') await skipDialogue(after, null);
+    await waitLine(/^campaign \S+ -> Map/, 20000, after);
+  }
+  if (!resAt) throw new Error('could not beat Mira');
+  await takeReward(resAt, { owned: STARTER });
+  // もう一度ミラ: 再戦の登場台詞
+  {
+    await waitScreen('Map', resAt, 30000);
+    const talkFrom = await openDeck(1, 0, null);
+    const talk = await waitLine(/^talk (first|rematch) harbor-apprentice/, 10000, talkFrom);
+    checks.rematchTalk = talk.line;
+    if (!/rematch/.test(talk.line)) throw new Error('expected a rematch talk: ' + talk.line);
+    await talkShot(talkFrom, '02_dialogue_rematch_mira', 0);
+  }
+
+  // ---------------- B ----------------
+  navAt = consoleLines.length;
+  await send('Page.navigate', { url: `${BASE}?log&seed=${+SEED + 1}&speed=x1` });
+  await waitLine(/^campaign load (\S+) save/, 120000, navAt);
+  const tAt = await waitScreen('Title', navAt, 60000);
+  await sleep(800);
+  await openSettingsAndErase(tAt, {});
+  navAt = consoleLines.length;
+  const grant = ALL_CARDS.filter((id) => !STARTER.includes(id)).join(',');
+  await send('Page.navigate', { url: `${BASE}?log&seed=${+SEED + 1}&speed=x1&grant=${grant}&unlock=all&forcewin=gate-elder` });
+  await waitLine(/^campaign load (\S+) nosave/, 120000, navAt);
+  await newGameIntro(navAt, {});
+  // デッキ編集（50 種類）の FPS: 5b-2 と同じ計り方（開いて 4 秒、カーソルは一覧の上）
+  {
+    const mapAt = await waitScreen('Map', navAt, 30000);
+    await sleep(1500); // 星図にいる間に小さなカードを作っておく
+    await clickUi('Map', 'Region1', lastLine(/^screen Map /).index);
+    const rAt = await waitScreen('Region', mapAt);
+    await sleep(400);
+    await clickUi('Region', 'Challenge0', rAt);
+    const dAt = await waitScreen('Deck', rAt);
+    await move(400, 500);
+    await sleep(4000);
+    await shot('07_deck_50_cards');
+    const listed = await waitLine(/^deck listed (\d+)/, 1000, dAt);
+    checks.deckListed = listed.line;
+    await clickUi('Deck', 'DeckBackButton', lastLine(/^screen Deck /).index);
+    const fd = await waitLine(/^fps-deck (.*)/, 5000, dAt);
+    results.fpsDeck50 = fd.line;
+    log('fps deck 50:', fd.line);
+    const r2 = await waitScreen('Region', dAt);
+    await sleep(300);
+    // 2 回目に開いたとき（作り直しなし）
+    await clickUi('Region', 'Challenge0', r2);
+    const d2 = await waitScreen('Deck', r2);
+    await move(400, 500);
+    await sleep(4000);
+    await clickUi('Deck', 'DeckBackButton', lastLine(/^screen Deck /).index);
+    const fd2 = await waitLine(/^fps-deck (.*)/, 5000, d2);
+    results.fpsDeck50Again = fd2.line;
+    log('fps deck 50 (again):', fd2.line);
+    const r3 = await waitScreen('Region', d2);
+    await sleep(300);
+    await clickUi('Region', 'RegionBackButton', r3);
+    await waitScreen('Map', r3);
+  }
+  // イオ: 初回の台詞 → 勝ちを注入 → 報酬 → 主の台詞 → 帯 → エンディング → クレジット → 星図
+  {
+    const talkFrom = await openDeck(4, 2, null);
+    const talk = await waitLine(/^talk (first|rematch) gate-elder/, 10000, talkFrom);
+    checks.ioTalk = talk.line;
+    const afterIntro = await talkShot(talkFrom, '03_dialogue_first_io', 1);
+    const nextAt = await takeReward(afterIntro, { owned: ALL_CARDS });
+    await talkShot(nextAt, '04a_dialogue_region_clear_io', 0);
+    await waitLine(/^cleared shown/, 20000, nextAt);
+    await sleep(400);
+    await shot('04b_cleared_band_gate');
+    const es = await waitLine(/^ending shown (\d+)/, 30000, nextAt);
+    checks.ending = es.line;
+    await sleep(900);
+    await shot('04c_ending_text');
+    await clickUi('Ending', 'EndingTap', es.index);
+    const cr = await waitLine(/^credits rolling/, 60000, es.index);
+    await sleep(1500);
+    await shot('05a_credits_rolling');
+    await sleep(3000);
+    await shot('05b_credits_rolling_later');
+    await clickUi('Credits', 'CreditsCloseButton', lastLine(/^screen Credits /, es.index).index);
+    const end = await waitLine(/^credits roll end( skipped)?/, 10000, cr.index);
+    checks.creditsEnd = end.line;
+    await waitLine(/^campaign EndCredits -> Map/, 10000, cr.index);
+    await sleep(800);
+    await shot('05c_map_after_ending');
+    checks.flow = consoleLines.slice(talkFrom).map((l) => l.line).filter((l) => /^campaign \S+ -> /.test(l));
+  }
+  // もう一度イオ: 再戦の台詞、エンディングは出ない
+  {
+    const talkFrom = await openDeck(4, 2, null);
+    const talk = await waitLine(/^talk (first|rematch) gate-elder/, 10000, talkFrom);
+    checks.ioRematch = talk.line;
+    const afterIntro = await talkShot(talkFrom, '02b_dialogue_rematch_io', 0);
+    const nextAt = await takeReward(afterIntro, { owned: ALL_CARDS });
+    await waitLine(/^campaign Reward -> Map/, 20000, nextAt);
+    await sleep(500);
+    const lines = consoleLines.slice(talkFrom).map((l) => l.line);
+    checks.secondWinEnding = lines.some((l) => /^ending begin|^credits roll begin|-> Ending/.test(l));
+    if (checks.secondWinEnding) throw new Error('the ending played on the second win');
+  }
+  results.fps = consoleLines.filter((l) => /^fps/.test(l.line)).map((l) => l.line);
+  results.checks = checks;
+  log('checks', JSON.stringify(checks));
+}
+
 let exitCode = 0;
 try {
   await connect();
@@ -1156,6 +1374,10 @@ try {
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
   if (args.scenario === 'title') {
     await runTitle();
+    throw { done: true };
+  }
+  if (args.scenario === '5c') {
+    await run5c();
     throw { done: true };
   }
   if (args.scenario === '5b2') {

@@ -22,6 +22,9 @@ namespace Edgewise.Game.UI
     /// 上段: 5 つの枠と「合計 Lv 13 / 15」の目盛り（上限を超えると赤）。下段: 手持ちの一覧（レベル順・属性と系統で絞り込み・枚数バッジ・
     /// 残りの予算で入らないカードは薄く）。タップで入れる・外す、「おまかせ」で自動編成、「この 5 枚で挑む」で開始（条件を満たすまで押せない）。
     /// 横（縦画面では上）に相手の情報（立ち絵・ルール・見えている持ちカード）。操作の中身は DeckEditModel（EditMode でテスト）。
+    /// 手触り（5c）: 小さなカードは 1 枚ごとに 15 個ほどの uGUI の部品と TextMeshPro を持つので、50 種類を一度に作る・表示すると
+    /// 開いた直後のフレームが落ちる。そこで (1) 星図・星域の画面にいる間に少しずつ作っておき（PrewarmStep。画面は非表示のまま作るので描画の負荷はない）、
+    /// (2) 一覧は 1 フレームに BindPerFrame 枚ずつ表示する（上の段から順に、配られるように現れる）。
     /// </summary>
     public sealed class DeckEditScreen : MonoBehaviour, IResponsiveUi
     {
@@ -55,7 +58,15 @@ namespace Edgewise.Game.UI
         [SerializeField] TextMeshProUGUI oppSeenLabel;
         [SerializeField] MiniCardView[] oppCards = new MiniCardView[RegionScreen.MaxCards];
 
+        /// <summary>一覧の小さなカードを 1 フレームに何枚ずつ表示するか（開いた直後も 60FPS を保つため）。</summary>
+        public const int BindPerFrame = 4;
+
         readonly List<MiniCardView> _items = new List<MiniCardView>();
+        IReadOnlyList<CardDef> _listing;
+        int _bound;
+        Coroutine _binding;
+        MiniCardView[] _newSlots;
+        MiniCardView[] _newOpp;
         DeckEditModel _model;
         CampaignState _state;
         Opponent _opponent;
@@ -76,6 +87,12 @@ namespace Edgewise.Game.UI
         public string StatusText => statusText.text;
         public Color TotalColor => totalText.color;
         public IReadOnlyList<MiniCardView> Items => _items;
+
+        /// <summary>一覧を少しずつ表示している途中か（終わると false）。</summary>
+        public bool Populating => _binding != null;
+
+        /// <summary>作ってある一覧の小さなカードの数（PrewarmStep の進み具合）。</summary>
+        public int PooledItems => _items.Count;
         public MiniCardView Slot(int i) => slots[i];
 
         static readonly Element?[] ElementOrder =
@@ -182,17 +199,66 @@ namespace Edgewise.Game.UI
 
         void EnsureCards()
         {
-            if (HasCards) return;
-            slots = new MiniCardView[5];
-            slotButtons = new Button[5];
-            for (int i = 0; i < 5; i++)
+            int made = 0;
+            MakeFixedCards(ref made, int.MaxValue);
+        }
+
+        /// <summary>5 つの枠と相手の持ちカードの小さなカードを、合わせて budget 枚まで作る。すべてそろったら true。</summary>
+        bool MakeFixedCards(ref int made, int budget)
+        {
+            if (HasCards) return true;
+            if (_newSlots == null)
             {
-                slots[i] = MiniCardView.Create(slotRoot, "Slot" + i, assets, true);
-                slotButtons[i] = slots[i].Button;
+                _newSlots = new MiniCardView[5];
+                _newOpp = new MiniCardView[RegionScreen.MaxCards];
             }
-            oppCards = new MiniCardView[RegionScreen.MaxCards];
-            for (int i = 0; i < oppCards.Length; i++) oppCards[i] = MiniCardView.Create(sidePanel.transform, "Seen" + i, assets, false);
+            for (int i = 0; i < _newSlots.Length && made < budget; i++)
+            {
+                if (_newSlots[i] != null) continue;
+                _newSlots[i] = MiniCardView.Create(slotRoot, "Slot" + i, assets, true);
+                made++;
+            }
+            for (int i = 0; i < _newOpp.Length && made < budget; i++)
+            {
+                if (_newOpp[i] != null) continue;
+                _newOpp[i] = MiniCardView.Create(sidePanel.transform, "Seen" + i, assets, false);
+                made++;
+            }
+            if (Array.IndexOf(_newSlots, null) >= 0 || Array.IndexOf(_newOpp, null) >= 0) return false;
+            slots = _newSlots;
+            slotButtons = new Button[5];
+            for (int i = 0; i < 5; i++) slotButtons[i] = slots[i].Button;
+            oppCards = _newOpp;
+            _newSlots = null;
+            _newOpp = null;
             ApplyLayout(_portrait);
+            return true;
+        }
+
+        MiniCardView CreateItem()
+        {
+            var v = MiniCardView.Create(content, "Own", assets, true);
+            v.gameObject.SetActive(false);
+            var item = v;
+            v.Button.onClick.AddListener(() => OnItem(item));
+            _items.Add(v);
+            return v;
+        }
+
+        /// <summary>
+        /// 画面を開く前に小さなカードを少しずつ作っておく（星図・星域の画面から毎フレーム呼ぶ。1 回に budget 枚まで）。
+        /// 一覧は poolSize 枚（手持ちの種類数）まで。すべて作り終えたら true。画面は非表示のままなので、作るだけで描画の負荷は出ない。
+        /// </summary>
+        public bool PrewarmStep(int poolSize, int budget)
+        {
+            int made = 0;
+            if (!MakeFixedCards(ref made, budget)) return false;
+            while (_items.Count < poolSize && made < budget)
+            {
+                CreateItem();
+                made++;
+            }
+            return _items.Count >= poolSize;
         }
 
         void Awake()
@@ -236,28 +302,57 @@ namespace Edgewise.Game.UI
             backButton.onClick.AddListener(() => BackPressed?.Invoke());
         }
 
-        float _fpsTime, _fpsWorst;
-        int _fpsFrames;
+        float _fpsTime, _fpsWorst, _fpsFirst, _fps1sTime;
+        int _fpsFrames, _fps1sFrames;
 
-        /// <summary>この画面を開いていた間の FPS（自動操作のログ用。絵つきの小さなカードが多い画面で 60FPS を保てているか）。</summary>
+        /// <summary>
+        /// この画面を開いていた間の FPS（自動操作のログ用。絵つきの小さなカードが多い画面で 60FPS を保てているか）。
+        /// avg は開いていた間の平均、worst は 6 フレーム目以降の最悪値、first は開いた直後の 1 フレームの時間、1s は開いてから 1 秒間の平均。
+        /// </summary>
         void LogFps()
         {
             if (!AutomationLog.Enabled || _fpsTime < 0.3f) return;
-            AutomationLog.Write("fps-deck avg " + (_fpsFrames / _fpsTime).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " worst "
-                + (_fpsWorst * 1000f).ToString("0", System.Globalization.CultureInfo.InvariantCulture) + "ms over "
-                + _fpsTime.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "s items " + _items.Count);
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            AutomationLog.Write("fps-deck avg " + (_fpsFrames / _fpsTime).ToString("0.0", inv) + " worst "
+                + (_fpsWorst * 1000f).ToString("0", inv) + "ms over "
+                + _fpsTime.ToString("0.0", inv) + "s items " + ActiveItems() + " first " + (_fpsFirst * 1000f).ToString("0", inv) + "ms 1s "
+                + (_fps1sTime > 0f ? _fps1sFrames / _fps1sTime : 0f).ToString("0.0", inv));
             _fpsTime = 0f;
             _fpsFrames = 0;
             _fpsWorst = 0f;
+            _fpsFirst = 0f;
+            _fps1sTime = 0f;
+            _fps1sFrames = 0;
         }
 
-        void OnDisable() => LogFps();
+        int ActiveItems()
+        {
+            int n = 0;
+            foreach (var it in _items)
+            {
+                if (it.gameObject.activeSelf) n++;
+            }
+            return n;
+        }
+
+        void OnDisable()
+        {
+            LogFps();
+            // 表示の途中で閉じた（コルーチンは止まる）: 次に開いたときに最初から表示し直す
+            _binding = null;
+        }
 
         void Update()
         {
             float fdt = Time.unscaledDeltaTime;
+            if (_fpsFrames == 0) _fpsFirst = fdt;
             _fpsTime += fdt;
             _fpsFrames++;
+            if (_fps1sTime < 1f)
+            {
+                _fps1sTime += fdt;
+                _fps1sFrames++;
+            }
             if (_fpsFrames > 5 && fdt > _fpsWorst) _fpsWorst = fdt;
             var kb = Keyboard.current;
             if (kb != null && (kb.escapeKey.wasPressedThisFrame || kb.backspaceKey.wasPressedThisFrame) && !SettingsPanel.AnyOpen) BackPressed?.Invoke();
@@ -450,33 +545,76 @@ namespace Edgewise.Game.UI
 
         public void Hide() => gameObject.SetActive(false);
 
-        /// <summary>一覧を作り直す（絞り込みを変えたとき）。</summary>
+        /// <summary>
+        /// 一覧を作り直す（開いたとき・絞り込みを変えたとき）。いったん隠し、BindPerFrame 枚ずつ上の段から表示する（BindStep）。
+        /// 押せるのは表示し終えたカードだけ。
+        /// </summary>
         void Rebuild()
         {
-            var list = _model.Listing();
-            while (_items.Count < list.Count)
+            _listing = _model.Listing();
+            _bound = 0;
+            foreach (var it in _items)
             {
-                var v = MiniCardView.Create(content, "Own", assets, true);
-                var item = v;
-                v.Button.onClick.AddListener(() => OnItem(item));
-                _items.Add(v);
-            }
-            for (int i = 0; i < _items.Count; i++)
-            {
-                bool on = i < list.Count;
-                _items[i].gameObject.SetActive(on);
-                if (!on) continue;
-                _items[i].name = "Own_" + list[i].Id;
-                _items[i].Show(list[i], true);
+                if (it.gameObject.activeSelf) it.gameObject.SetActive(false);
             }
             Refresh();
-            if (AutomationLog.Enabled) StartCoroutine(LogNextFrame());
+            if (_binding != null) StopCoroutine(_binding);
+            _binding = null;
+            if (!isActiveAndEnabled)
+            {
+                while (BindStep(int.MaxValue)) { }
+                return;
+            }
+            BindStep(BindPerFrame);
+            _binding = StartCoroutine(Populate());
         }
 
-        System.Collections.IEnumerator LogNextFrame()
+        /// <summary>一覧のカードを max 枚まで表示する。まだ残っていれば true。</summary>
+        bool BindStep(int max)
         {
-            yield return null;
-            AutomationLog.Buttons("Deck", transform);
+            if (_listing == null) return false;
+            int n = 0;
+            while (_bound < _listing.Count && n < max)
+            {
+                var def = _listing[_bound];
+                var v = _bound < _items.Count ? _items[_bound] : CreateItem();
+                v.name = "Own_" + def.Id;
+                v.gameObject.SetActive(true);
+                v.Show(def, true);
+                ApplyItemState(v);
+                var rt = (RectTransform)v.transform;
+                if (max != int.MaxValue && UserPrefs.TimeFactor > 0f)
+                    Tweens.Play(0.16f * UserPrefs.TimeFactor, k => rt.localScale = Vector3.one * Mathf.Lerp(0.82f, 1f, k), Ease.OutBack, 0f, rt, "deal");
+                else rt.localScale = Vector3.one;
+                _bound++;
+                n++;
+            }
+            return _bound < _listing.Count;
+        }
+
+        System.Collections.IEnumerator Populate()
+        {
+            while (true)
+            {
+                yield return null;
+                if (!BindStep(BindPerFrame)) break;
+            }
+            _binding = null;
+            if (AutomationLog.Enabled)
+            {
+                // 一覧の位置はレイアウトが済んだ次のフレームに出す
+                yield return null;
+                AutomationLog.Write("deck listed " + _bound);
+                AutomationLog.Buttons("Deck", transform);
+            }
+        }
+
+        /// <summary>表示し終えるのを待たずに、残りを全部表示する（テスト用）。</summary>
+        public void FinishPopulating()
+        {
+            if (_binding != null) StopCoroutine(_binding);
+            _binding = null;
+            while (BindStep(int.MaxValue)) { }
         }
 
         void OnItem(MiniCardView item)
@@ -564,16 +702,23 @@ namespace Edgewise.Game.UI
             foreach (var item in _items)
             {
                 if (!item.gameObject.activeSelf || item.CardId == null) continue;
-                bool inDeck = _model.Contains(item.CardId);
-                item.SetBadge(_model.Count(item.CardId));
-                item.SetMark(inDeck ? UiText.MarkOwned : null, Theme.P0);
-                item.SetDim(!_model.Fits(item.CardId));
-                if (inDeck) item.SetSelected(true);
+                ApplyItemState(item);
             }
             for (int i = 0; i < ElementChips; i++) Mark(elementChips[i], _model.ElementFilter == ElementOrder[i]);
             for (int i = 0; i < TribeChips; i++) Mark(tribeChips[i], _model.TribeFilter == TribeOrder[i]);
             if (AutomationLog.Enabled)
                 AutomationLog.Write("deck " + string.Join(",", sel) + " total " + total + "/" + _model.Cap + (over ? " over" : "") + (_model.CanBegin ? " ready" : ""));
+        }
+
+        /// <summary>一覧の 1 枚に、枚数のバッジ・デッキに入っている印・入らないときの薄さを付ける。</summary>
+        void ApplyItemState(MiniCardView item)
+        {
+            if (_model == null || item.CardId == null) return;
+            bool inDeck = _model.Contains(item.CardId);
+            item.SetBadge(_model.Count(item.CardId));
+            item.SetMark(inDeck ? UiText.MarkOwned : null, Theme.P0);
+            item.SetDim(!_model.Fits(item.CardId));
+            if (inDeck) item.SetSelected(true);
         }
 
         static void Mark(Button b, bool on)

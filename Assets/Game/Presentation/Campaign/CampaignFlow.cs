@@ -46,6 +46,12 @@ namespace Edgewise.Game.Campaign
 
         /// <summary>「〈星域名〉を巡り終えた」の帯。この後の星図で次の星域の鍵が外れる。</summary>
         Cleared,
+
+        /// <summary>エンディングの文（最後の星域の主に初めて勝ったとき。CampaignData.Ending）。</summary>
+        Ending,
+
+        /// <summary>エンディングの後、クレジットを自動で流す（スキップ可）。終わったら星図へ。</summary>
+        EndCredits,
     }
 
     /// <summary>会話の 1 行（話す相手と本文）。</summary>
@@ -64,6 +70,7 @@ namespace Edgewise.Game.Campaign
     /// <summary>
     /// 星図巡りの画面の流れ（DESIGN §12-1 / §12-11）。表示に依存しない純粋な状態遷移で、EditMode でテストする。
     /// 星図 → 星域 → デッキ → 会話 → 対戦 → 結果 → 会話 → 報酬（勝ち）/ 取られる（原作モードの負け）→（主に初勝利: 会話 → 帯）→ 星図。
+/// 最後の星域の主に初めて勝ったときだけ、帯の後にエンディングの文 → クレジット → 星図（5c）。登場の会話は 2 回目以降の対戦で再戦用になる。
     /// セーブ（CampaignSession.Save）はデッキを決めた後・対戦の後・報酬の後（と導入の後）に行う。
     /// - 対戦の後: 勝敗・解放・原作モードで取られたカードを、報酬なし（picks 空）で Core の ApplyMatch に通して保存する
     ///   （報酬を選ぶ前にやめても勝敗は残る）。
@@ -98,6 +105,9 @@ namespace Edgewise.Game.Campaign
         public MatchApplication Application { get; private set; }
 
         public RewardModel Reward { get; private set; }
+
+        /// <summary>この対戦がその相手との再戦か（登場の台詞を再戦用にした）。</summary>
+        public bool IsRematch { get; private set; }
 
         /// <summary>今の会話の行（TalkBefore / TalkAfter / TalkClear）。</summary>
         public IReadOnlyList<DialogueLine> Lines { get; private set; } = Array.Empty<DialogueLine>();
@@ -192,7 +202,8 @@ namespace Edgewise.Game.Campaign
             HasOutcome = false;
             Application = null;
             Reward = null;
-            Lines = Talk(Opponent.Lines.Intro);
+            IsRematch = CampaignRules.IsRematch(State, Opponent);
+            Lines = Talk(CampaignRules.IntroLines(State, Opponent));
             Go(CampaignStep.TalkBefore);
             return true;
         }
@@ -319,9 +330,26 @@ namespace Edgewise.Game.Campaign
             return true;
         }
 
+        /// <summary>帯の後: 最後の星域を初めて巡り終えたならエンディングへ、そうでなければ星図へ。</summary>
         public bool FinishCleared()
         {
             if (Step != CampaignStep.Cleared) return false;
+            if (Application != null && Application.CompletedJourney) Go(CampaignStep.Ending);
+            else ToMap();
+            return true;
+        }
+
+        public bool FinishEnding()
+        {
+            if (Step != CampaignStep.Ending) return false;
+            Go(CampaignStep.EndCredits);
+            return true;
+        }
+
+        /// <summary>クレジットを流し終えた（スキップも）: 星図へ戻る（以後も再戦と収集を続けられる）。</summary>
+        public bool FinishEndCredits()
+        {
+            if (Step != CampaignStep.EndCredits) return false;
             ToMap();
             return true;
         }

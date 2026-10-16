@@ -191,6 +191,9 @@ namespace Edgewise.EditorTools
                         foreach (char c in line) set.Add(c);
                 }
             }
+            // エンディングの文（5c）
+            foreach (var line in CampaignData.Ending)
+                foreach (char c in line) set.Add(c);
             foreach (char c in Theme.MarkP0 + Theme.MarkP1 + "★☆−") set.Add(c);
             set.Remove('\n');
             set.Remove('\r');

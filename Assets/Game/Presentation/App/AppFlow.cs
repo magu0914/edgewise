@@ -21,6 +21,7 @@ namespace Edgewise.Game.App
     /// URL のクエリ（WebGL）: ?log = 自動操作用のログ、?seed=N = 配牌と先攻（星図巡りでは新しく始めるときの seed）を固定、
     /// ?speed=x1|x2|instant、?slow=4 = 撮影用のスロー、?bench / ?debug = デバッグシーン（CPU 対 CPU の計測）へ、
     /// ?grant=a,b,c = 撮影用: 星図巡りを新しく始めたときに手持ちへカードを足す（?log と一緒のときだけ）。
+    /// ?unlock=all = 撮影用: 新しく始めたときに全星域を開く、?forcewin=相手ID = その相手との対戦を勝ちとして注入する（どちらも ?log と一緒のときだけ。5c）。
     /// </summary>
     public sealed class AppFlow : MonoBehaviour
     {
@@ -98,7 +99,8 @@ namespace Edgewise.Game.App
         {
             ReadUrl();
             _settings = MatchSettings.Load();
-            campaign.Initialize(AutomationLog.Enabled ? Grants() : null);
+            campaign.Initialize(AutomationLog.Enabled ? Grants() : null, AutomationLog.Enabled && Param("unlock") == "all",
+                AutomationLog.Enabled ? Param("forcewin") : null);
             title.CampaignPressed += campaign.Enter;
             settings.Campaign = campaign;
             settings.CampaignErased += () => title.SetProgress(campaign.TitleProgress);

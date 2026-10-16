@@ -5,11 +5,17 @@ using Edgewise.Core.AI;
 
 namespace Edgewise.Core.Campaign
 {
-    /// <summary>対戦相手の台詞（DESIGN §12-7）。各 1〜3 行。5c で推敲する仮の文。</summary>
+    /// <summary>
+    /// 対戦相手の台詞（DESIGN §12-7 / §12-7-1）。各場面 1〜3 行、1 行は全角 30 字以内が目安。
+    /// 登場は初回（Intro。担当のルールに 1 行だけ触れる）と再戦（Rematch。その相手と 1 度でも対戦したことがあれば）で分ける。
+    /// </summary>
     public sealed class Dialogue
     {
-        /// <summary>登場（対戦前）。</summary>
+        /// <summary>登場（初回の対戦前）。</summary>
         public IReadOnlyList<string> Intro { get; }
+
+        /// <summary>登場（再戦。2 回目以降の対戦前）。どちらを出すかは CampaignRules.IntroLines が決める。</summary>
+        public IReadOnlyList<string> Rematch { get; }
 
         /// <summary>プレイヤーが勝ったとき（相手が負けたときの台詞）。</summary>
         public IReadOnlyList<string> PlayerWins { get; }
@@ -26,10 +32,11 @@ namespace Edgewise.Core.Campaign
         /// <summary>主だけ: 星域を抜けたとき（主に初めて勝ったとき）。主以外は空。</summary>
         public IReadOnlyList<string> RegionClear { get; }
 
-        public Dialogue(string[] intro, string[] playerWins, string[] playerLoses, string[] giveCard, string[] takeCard,
+        public Dialogue(string[] intro, string[] rematch, string[] playerWins, string[] playerLoses, string[] giveCard, string[] takeCard,
             string[] regionClear = null)
         {
             Intro = Wrap(intro, nameof(intro));
+            Rematch = Wrap(rematch, nameof(rematch));
             PlayerWins = Wrap(playerWins, nameof(playerWins));
             PlayerLoses = Wrap(playerLoses, nameof(playerLoses));
             GiveCard = Wrap(giveCard, nameof(giveCard));
@@ -47,6 +54,7 @@ namespace Edgewise.Core.Campaign
         public IEnumerable<string> AllLines()
         {
             foreach (var l in Intro) yield return l;
+            foreach (var l in Rematch) yield return l;
             foreach (var l in PlayerWins) yield return l;
             foreach (var l in PlayerLoses) yield return l;
             foreach (var l in GiveCard) yield return l;

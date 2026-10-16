@@ -67,6 +67,7 @@ namespace Edgewise.Tests.EditMode
             Assert.That(flow.MatchConfig().Rules, Is.EqualTo(Harbor.Rules));
             Assert.That(flow.FinishMatch(new CampaignOutcome(MatchResultKind.Win, false)), Is.True);
             Assert.That(flow.Step, Is.EqualTo(CampaignStep.Result));
+            Assert.That(flow.IsRematch, Is.False, "the first meeting");
             Assert.That(flow.FinishResult(), Is.True);
             Assert.That(flow.Step, Is.EqualTo(CampaignStep.TalkAfter));
             Assert.That(flow.Lines.Select(l => l.Text), Is.EqualTo(Mira.Lines.PlayerWins.Concat(Mira.Lines.GiveCard)));
@@ -86,6 +87,11 @@ namespace Edgewise.Tests.EditMode
                 CampaignStep.Result, CampaignStep.TalkAfter, CampaignStep.Reward, CampaignStep.Map,
             }));
             Assert.That(store.Writes, Is.EqualTo(4), "intro, deck, match, reward");
+
+            // 5c: 2 回目は再戦の登場台詞
+            ToMatch(flow, Harbor, Mira);
+            Assert.That(flow.IsRematch, Is.True);
+            Assert.That(flow.Lines.Select(l => l.Text), Is.EqualTo(Mira.Lines.Rematch), "the rematch lines");
         }
 
         [Test]
@@ -154,6 +160,81 @@ namespace Edgewise.Tests.EditMode
             flow.FinishReward();
             Assert.That(flow.Step, Is.EqualTo(CampaignStep.Map));
             Assert.That(flow.ConsumePendingUnlock(), Is.Null);
+        }
+
+        /// <summary>5c: 最後の主（イオ）に初めて勝つ → 星域を抜けた台詞 → 帯 → エンディングの文 → クレジット → 星図。2 回目の勝利では出ない。</summary>
+        [Test]
+        public void TheEndingPlaysOnlyOnTheFirstWinOverTheLastBoss()
+        {
+            var gate = CampaignData.Regions[3];
+            var io = gate.Boss;
+            var start = CampaignRules.NewGame(3).WithUnlocked(CampaignData.Regions.Select(r => r.Id));
+            var (flow, _) = NewFlow(SavedJson(start));
+            var steps = new List<CampaignStep>();
+            flow.StepChanged += (_, next) => steps.Add(next);
+            flow.Enter();
+            ToMatch(flow, gate, io);
+            Assert.That(flow.IsRematch, Is.False);
+            Assert.That(flow.Lines.Select(l => l.Text), Is.EqualTo(io.Lines.Intro));
+            flow.FinishMatch(new CampaignOutcome(MatchResultKind.Win, false));
+            Assert.That(flow.Application.CompletedJourney, Is.True);
+            flow.FinishResult();
+            flow.FinishTalkAfter();
+            flow.Pick(0);
+            Assert.That(flow.FinishReward(), Is.True);
+            Assert.That(flow.Step, Is.EqualTo(CampaignStep.TalkClear), "1. the boss's region-clear lines");
+            Assert.That(flow.Lines.Select(l => l.Text), Is.EqualTo(io.Lines.RegionClear));
+            Assert.That(flow.FinishEnding(), Is.False, "not yet");
+            flow.FinishClearTalk();
+            Assert.That(flow.Step, Is.EqualTo(CampaignStep.Cleared), "2. the band");
+            Assert.That(flow.PendingUnlock, Is.Null, "nothing left to unlock");
+            Assert.That(flow.FinishCleared(), Is.True);
+            Assert.That(flow.Step, Is.EqualTo(CampaignStep.Ending), "3. the ending text");
+            Assert.That(flow.FinishEnding(), Is.True);
+            Assert.That(flow.Step, Is.EqualTo(CampaignStep.EndCredits), "4. the credits roll");
+            Assert.That(flow.FinishEndCredits(), Is.True);
+            Assert.That(flow.Step, Is.EqualTo(CampaignStep.Map), "5. back to the map");
+            Assert.That(steps.SkipWhile(s => s != CampaignStep.Reward), Is.EqualTo(new[]
+            {
+                CampaignStep.Reward, CampaignStep.TalkClear, CampaignStep.Cleared, CampaignStep.Ending, CampaignStep.EndCredits, CampaignStep.Map,
+            }));
+
+            // 2 回目の勝利: 再戦の登場台詞、エンディングなしで星図へ
+            steps.Clear();
+            ToMatch(flow, gate, io);
+            Assert.That(flow.IsRematch, Is.True);
+            Assert.That(flow.Lines.Select(l => l.Text), Is.EqualTo(io.Lines.Rematch), "the rematch lines");
+            flow.FinishMatch(new CampaignOutcome(MatchResultKind.Win, false));
+            Assert.That(flow.Application.CompletedJourney, Is.False);
+            flow.FinishResult();
+            flow.FinishTalkAfter();
+            flow.Pick(0);
+            flow.FinishReward();
+            Assert.That(flow.Step, Is.EqualTo(CampaignStep.Map));
+            Assert.That(steps, Has.No.Member(CampaignStep.Ending));
+            Assert.That(steps, Has.No.Member(CampaignStep.EndCredits));
+        }
+
+        /// <summary>5c: ほかの主（星域 1〜3）への初勝利では、帯の後はエンディングなしで星図へ。</summary>
+        [Test]
+        public void OtherBossesDoNotTriggerTheEnding()
+        {
+            var start = CampaignRules.NewGame(3).WithUnlocked(CampaignData.Regions.Select(r => r.Id));
+            foreach (var r in CampaignData.Regions.Take(3))
+            {
+                var (flow, _) = NewFlow(SavedJson(start));
+                flow.Enter();
+                ToMatch(flow, r, r.Boss);
+                flow.FinishMatch(new CampaignOutcome(MatchResultKind.Win, false));
+                flow.FinishResult();
+                flow.FinishTalkAfter();
+                flow.Pick(0);
+                flow.FinishReward();
+                flow.FinishClearTalk();
+                Assert.That(flow.Step, Is.EqualTo(CampaignStep.Cleared), r.Id);
+                flow.FinishCleared();
+                Assert.That(flow.Step, Is.EqualTo(CampaignStep.Map), r.Id);
+            }
         }
 
         [Test]

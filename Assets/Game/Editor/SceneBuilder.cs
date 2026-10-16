@@ -142,6 +142,9 @@ namespace Edgewise.EditorTools
             dialogue.Build(assets);
             var cleared = MakeScreen<ClearedBand>("Cleared", canvasGo.transform);
             cleared.Build(assets);
+            // エンディングの文（5c。最後の星域の主に初めて勝ったとき）
+            var ending = MakeScreen<EndingScreen>("Ending", canvasGo.transform);
+            ending.Build(assets);
             var settings = MakeScreen<SettingsPanel>("Settings", canvasGo.transform);
             settings.Build(assets);
             settings.gameObject.SetActive(false);
@@ -157,11 +160,11 @@ namespace Edgewise.EditorTools
 
             match.Wire(assets, board, hand0, hand1, hud, banner, layout, player, cards, juiceFx);
             flow.Wire(assets, table, title, setup, hud, menu, result, banner, match, fps, settings, bgm, dex, credits, fan, campaign);
-            campaign.Wire(flow, map, region, deck, dialogue, reward, cleared);
+            campaign.Wire(flow, map, region, deck, dialogue, reward, cleared, ending);
             table.SetActive(false);
 
             foreach (var c in new Component[] { layout, match, flow, board, hud, title, setup, result, menu, banner, settings, sfx, juiceFx, bgm, dex, credits, fan,
-                         campaign, stage, map, region, deck, reward, dialogue, cleared })
+                         campaign, stage, map, region, deck, reward, dialogue, cleared, ending })
                 EditorUtility.SetDirty(c);
             EditorSceneManager.MarkSceneDirty(scene);
             // 保存前の内容（中身が同じなら書き戻さず、git の差分を出さない）

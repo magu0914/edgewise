@@ -103,7 +103,7 @@ namespace Edgewise.Core.Tests.Campaign
                 Assert.That(o.Name, Is.Not.Empty);
                 Assert.That(o.Title, Is.Not.Empty);
                 Assert.That(o.Profile, Is.Not.Null);
-                foreach (var lines in new[] { o.Lines.Intro, o.Lines.PlayerWins, o.Lines.PlayerLoses, o.Lines.GiveCard, o.Lines.TakeCard })
+                foreach (var lines in new[] { o.Lines.Intro, o.Lines.Rematch, o.Lines.PlayerWins, o.Lines.PlayerLoses, o.Lines.GiveCard, o.Lines.TakeCard })
                 {
                     Assert.That(lines.Count, Is.InRange(1, 3), o.Id);
                     Assert.That(lines.All(l => !string.IsNullOrWhiteSpace(l)), Is.True, o.Id);
@@ -113,21 +113,25 @@ namespace Edgewise.Core.Tests.Campaign
             }
         }
 
+        /// <summary>権利の扱い（DESIGN §0）。原作を連想させる代表的な固有名詞（台詞・名前・エンディングに入れない）。</summary>
+        internal static readonly string[] BannedWords =
+        {
+            "チョコボ", "モーグリ", "サボテンダー", "トンベリ", "クリスタル", "トリプル", "トライアド", "スコール", "リノア", "ガーデン",
+            "SeeD", "シド", "バハムート", "イフリート", "シヴァ", "ファイナル", "Triple", "Triad",
+            "ガーネット", "ピアとピオ", "ジン", "パロム", "ポロム", "ティナ", "クラウド", "ティーダ", "ユウナ", "ライトニング", "オーディン", "リヴァイアサン", "ラムウ", "ポーション", "エーテル",
+        };
+
         [Test]
         public void DialogueAvoidsFinalFantasyProperNouns()
         {
-            // 権利の扱い（DESIGN §0）。原作を連想させる代表的な固有名詞が台詞・名前に入っていないこと
-            var banned = new[]
-            {
-                "チョコボ", "モーグリ", "サボテンダー", "トンベリ", "クリスタル", "トリプル", "トライアド", "スコール", "リノア", "ガーデン",
-                "SeeD", "シド", "バハムート", "イフリート", "シヴァ", "ファイナル", "Triple", "Triad",
-                "ガーネット", "ピアとピオ", "ジン", "パロム", "ポロム", "ティナ", "クラウド", "ティーダ", "ユウナ", "ライトニング", "オーディン", "リヴァイアサン", "ラムウ", "ポーション", "エーテル",
-            };
+            var banned = BannedWords;
             foreach (var o in CampaignData.Opponents)
             {
                 var text = string.Join("\n", o.Lines.AllLines()) + o.Name + o.Title;
                 foreach (var w in banned) Assert.That(text, Does.Not.Contain(w), o.Id);
             }
+            var ending = string.Join("\n", CampaignData.Ending);
+            foreach (var w in banned) Assert.That(ending, Does.Not.Contain(w), "ending");
         }
 
         [Test]
