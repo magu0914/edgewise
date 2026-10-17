@@ -146,6 +146,13 @@ namespace Edgewise.Game.UI
             _lines = lines;
             _skip = false;
             if (lines == null || lines.Count == 0) return;
+            // 前回の会話の本文・名前・立ち絵が、帯のせり上がり中に見えないよう先に差し替える
+            var first = lines[0].Speaker;
+            portrait.Show(first);
+            nameText.text = first != null ? first.Title + "  " + first.Name : "";
+            body.text = "";
+            body.maxVisibleCharacters = 0;
+            next.gameObject.SetActive(false);
             gameObject.SetActive(true);
             _tf = timeFactor;
             // 対戦後は盤面の上に重ねるので、背景を暗くして立ち絵を浮かせる
