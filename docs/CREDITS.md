@@ -64,7 +64,7 @@ Icons made by Lorc, Delapouite, Caro Asercion, Skoll and Cathelineau, available 
 | Sextantor | megabot | Lorc | CC BY 3.0 |
 | Ursamaw | polar-bear | Cathelineau | CC BY 3.0 |
 
-ゲーム内でも、タイトルの「クレジット」画面にこの表（カード → アイコン → 作者 → ライセンス）を、カード図鑑の拡大表示に 1 行のクレジットを出しています。
+ゲーム内でも、タイトルの「クレジット」画面とエンディングのエンドロールにこの表（カード → アイコン → 作者）を、カード図鑑の拡大表示に 1 行のクレジットを出しています。
 
 ### 対戦相手の立ち絵（星図巡り。5b-2）
 
@@ -108,9 +108,9 @@ Icons made by Lorc, Delapouite, Caro Asercion, Skoll and Cathelineau, available 
 - 入手元: Google Fonts（https://fonts.google.com/noto/specimen/Noto+Sans+JP）の配布物 `static/NotoSansJP-Regular.ttf`（2026-10-15 取得）
 - 著作権: Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'
 - ライセンス: SIL Open Font License, Version 1.1（全文: `Assets/Fonts/NotoSansJP-OFL.txt`）
-- 使い方: `Assets/Fonts/NotoSansJP-Regular.ttf` から、画面で使う文字（`UiText` の全文字列・ASCII・カード名、276 文字）だけを焼いた
+- 使い方: `Assets/Fonts/NotoSansJP-Regular.ttf` から、画面で使う文字（`UiText` の全文字列・ASCII・カード名・台詞など、661 文字。2026-10-18 時点）だけを焼いた
   TextMeshPro の静的な SDF フォントアセット（`Assets/Fonts/NotoSansJP-Regular SDF.asset`）を `ProjectSetup`（`FontBuilder`）が生成する。
-  WebGL ビルドに含まれるのはこのフォントアセット（1024×1024 のアトラス）だけで、元の TTF は含まれない。
+  WebGL ビルドに含まれるのはこのフォントアセット（2048×1024 のアトラス）だけで、元の TTF は含まれない。
   文字を足したら `ProjectSetup` を実行し直す（文字の集合が変わったときだけ作り直す）。
 
 ## Unity パッケージ同梱の素材

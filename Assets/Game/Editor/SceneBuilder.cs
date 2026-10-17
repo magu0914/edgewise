@@ -129,6 +129,9 @@ namespace Edgewise.EditorTools
             dex.Build(assets, layout, dexRoot.transform);
             var credits = MakeScreen<CreditsScreen>("Credits", canvasGo.transform);
             credits.Build(assets);
+            // 遊び方（8a。タイトルから開く 1 画面）
+            var howTo = MakeScreen<HowToScreen>("HowTo", canvasGo.transform);
+            howTo.Build(assets);
             // 星図巡り（5b-1）: 星図・星域・デッキ編集・報酬・会話・巡り終えた帯（会話と帯は他の画面の上）
             var map = MakeScreen<StarMapScreen>("StarMap", canvasGo.transform);
             map.Build(assets);
@@ -145,6 +148,9 @@ namespace Edgewise.EditorTools
             // エンディングの文（5c。最後の星域の主に初めて勝ったとき）
             var ending = MakeScreen<EndingScreen>("Ending", canvasGo.transform);
             ending.Build(assets);
+            // エンドロール（8a。エンディングの文の後に自動で流す）
+            var endRoll = MakeScreen<EndRollScreen>("EndRoll", canvasGo.transform);
+            endRoll.Build(assets);
             var settings = MakeScreen<SettingsPanel>("Settings", canvasGo.transform);
             settings.Build(assets);
             settings.gameObject.SetActive(false);
@@ -159,12 +165,12 @@ namespace Edgewise.EditorTools
             module.AssignDefaultActions();
 
             match.Wire(assets, board, hand0, hand1, hud, banner, layout, player, cards, juiceFx);
-            flow.Wire(assets, table, title, setup, hud, menu, result, banner, match, fps, settings, bgm, dex, credits, fan, campaign);
-            campaign.Wire(flow, map, region, deck, dialogue, reward, cleared, ending);
+            flow.Wire(assets, table, title, setup, hud, menu, result, banner, match, fps, settings, bgm, dex, credits, fan, campaign, howTo);
+            campaign.Wire(flow, map, region, deck, dialogue, reward, cleared, ending, endRoll);
             table.SetActive(false);
 
             foreach (var c in new Component[] { layout, match, flow, board, hud, title, setup, result, menu, banner, settings, sfx, juiceFx, bgm, dex, credits, fan,
-                         campaign, stage, map, region, deck, reward, dialogue, cleared, ending })
+                         campaign, stage, map, region, deck, reward, dialogue, cleared, ending, howTo, endRoll })
                 EditorUtility.SetDirty(c);
             EditorSceneManager.MarkSceneDirty(scene);
             // 保存前の内容（中身が同じなら書き戻さず、git の差分を出さない）

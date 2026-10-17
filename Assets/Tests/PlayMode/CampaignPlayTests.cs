@@ -286,17 +286,23 @@ namespace Edgewise.Tests.PlayMode
                 Assert.That(_camp.Ending.LineAlpha(i), Is.EqualTo(1f).Within(0.001f));
             }
             _camp.Ending.Advance();
-            // 4. クレジットが自動で流れる（スキップ可）
-            yield return WaitUntil(() => _camp.Step == CampaignStep.EndCredits && _app.Credits.IsRolling, "credits roll");
-            Assert.That(_app.Credits.IsOpen, Is.True);
-            Assert.That(_app.Credits.Body, Does.Contain("ありがとう"));
-            float p0 = _app.Credits.RollProgress;
+            // 4. エンドロールが自動で流れる（スキップ可。8a: 中央揃え・役割ごとの見出し・背景にカード）
+            var roll = _camp.EndRoll;
+            yield return WaitUntil(() => _camp.Step == CampaignStep.EndCredits && roll.IsRolling, "end roll");
+            Assert.That(roll.IsOpen, Is.True);
+            Assert.That(_app.Credits.IsOpen, Is.False, "the end roll is its own screen, not the credits list");
+            Assert.That(roll.Body, Does.Contain("ありがとう"));
+            foreach (var heading in new[] { "制作", "カード絵", "音楽", "フォント", "謝辞" })
+                Assert.That(roll.Body, Does.Contain(heading), "role heading " + heading);
+            Assert.That(roll.Body, Does.Contain("CC BY 3.0").And.Contain("OpenTracks").And.Contain("Noto Sans JP"));
+            float p0 = roll.RollProgress;
             yield return new WaitForSecondsRealtime(2.5f);
-            Assert.That(_app.Credits.RollProgress, Is.GreaterThan(p0), "the credits scroll by themselves");
-            Assert.That(_app.Credits.IsRolling, Is.True, "slowly");
-            _app.Credits.CloseButton.onClick.Invoke(); // 「スキップ」
+            Assert.That(roll.RollProgress, Is.GreaterThan(p0), "the end roll scrolls by itself");
+            Assert.That(roll.IsRolling, Is.True, "slowly");
+            roll.SkipButton.onClick.Invoke(); // 「スキップ」
             // 5. 星図へ
             yield return WaitUntil(() => _camp.Step == CampaignStep.Map && !_camp.Busy, "map after the credits");
+            Assert.That(roll.IsOpen, Is.False);
             Assert.That(_app.Credits.IsOpen, Is.False);
             Assert.That(_app.Title.gameObject.activeSelf, Is.False, "not the title: the journey goes on");
             Assert.That(_camp.Map.IsOpen, Is.True);
@@ -324,6 +330,7 @@ namespace Edgewise.Tests.PlayMode
             Assert.That(seen, Has.No.Member(CampaignStep.Ending));
             Assert.That(seen, Has.No.Member(CampaignStep.EndCredits));
             Assert.That(_app.Credits.IsOpen, Is.False);
+            Assert.That(_camp.EndRoll.IsOpen, Is.False);
             Assert.That(CampaignSave.Load(_store.Json).State.Record(io.Id).Wins, Is.EqualTo(2));
         }
 

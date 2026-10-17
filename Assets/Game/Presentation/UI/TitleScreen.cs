@@ -9,7 +9,7 @@ namespace Edgewise.Game.UI
 {
     /// <summary>
     /// タイトル画面: ロゴ（仮題）と主ボタン「星図巡り」（続きがあれば下に進み具合「星域 2・収集 18/50」）、
-    /// その下に「フリー対戦」「カード図鑑」「設定」「クレジット」。背景の星空は常に動き、ロゴの背後で扇のカードが回る（TitleFan）。
+    /// その下に「フリー対戦」「遊び方」「カード図鑑」「設定」「クレジット」。背景の星空は常に動き、ロゴの背後で扇のカードが回る（TitleFan）。
     /// </summary>
     public sealed class TitleScreen : MonoBehaviour, IResponsiveUi
     {
@@ -22,6 +22,7 @@ namespace Edgewise.Game.UI
         [SerializeField] Button settingsButton;
         [SerializeField] Button dexButton;
         [SerializeField] Button creditsButton;
+        [SerializeField] Button howToButton;
         [SerializeField] TextMeshProUGUI hint;
         [SerializeField] TextMeshProUGUI homage;
 
@@ -32,6 +33,7 @@ namespace Edgewise.Game.UI
         public event Action SettingsPressed;
         public event Action DexPressed;
         public event Action CreditsPressed;
+        public event Action HowToPressed;
 
         public Button CampaignButton => campaignButton;
         public string ProgressText => progress != null && progress.gameObject.activeSelf ? progress.text : "";
@@ -41,6 +43,7 @@ namespace Edgewise.Game.UI
         public Button SettingsButton => settingsButton;
         public Button DexButton => dexButton;
         public Button CreditsButton => creditsButton;
+        public Button HowToButton => howToButton;
 
         public void Build(GameAssets a)
         {
@@ -64,6 +67,7 @@ namespace Edgewise.Game.UI
             settingsButton = UiKit.Button(root, "TitleSettingsButton", a, UiText.MenuSettings, 26, out _);
             dexButton = UiKit.Button(root, "DexButton", a, UiText.TitleDex, 26, out _);
             creditsButton = UiKit.Button(root, "CreditsButton", a, UiText.TitleCredits, 26, out _);
+            howToButton = UiKit.Button(root, "HowToButton", a, UiText.TitleHowTo, 26, out _);
             hint = UiKit.Label(root, "Hint", a, UiText.TitleHint, 18, Theme.InkDim);
             homage = UiKit.Label(root, "Homage", a, UiText.Homage, 15, new Color(0.6f, 0.62f, 0.72f, 0.9f));
             ApplyLayout(false);
@@ -77,6 +81,7 @@ namespace Edgewise.Game.UI
             settingsButton.onClick.AddListener(() => SettingsPressed?.Invoke());
             dexButton.onClick.AddListener(() => DexPressed?.Invoke());
             creditsButton.onClick.AddListener(() => CreditsPressed?.Invoke());
+            howToButton.onClick.AddListener(() => HowToPressed?.Invoke());
         }
 
         public void ApplyLayout(bool portrait)
@@ -91,25 +96,26 @@ namespace Edgewise.Game.UI
             campaignButton.GetComponentInChildren<TextMeshProUGUI>().fontSize = portrait ? 42 : 36;
             UiKit.Place(progress.rectTransform, c, new Vector2(0f, portrait ? -170f : -144f), new Vector2(600f, 32f));
             progress.fontSize = portrait ? 28 : 22;
-            // 「星図巡り」の下に フリー対戦・カード図鑑・設定・クレジット（横は 1 列、縦は 2×2）
-            var subButtons = new[] { startButton, dexButton, settingsButton, creditsButton };
+            // 「星図巡り」の下に フリー対戦・遊び方・カード図鑑・設定・クレジット（横は 1 列、縦は 2 列で、余った最後の 1 つは中央）
+            var subButtons = new[] { startButton, howToButton, dexButton, settingsButton, creditsButton };
             for (int i = 0; i < subButtons.Length; i++)
             {
                 Vector2 pos, size;
                 if (portrait)
                 {
-                    pos = new Vector2((i % 2 == 0 ? -1f : 1f) * 160f, -250f - (i / 2) * 92f);
+                    bool lastAlone = i == subButtons.Length - 1 && subButtons.Length % 2 == 1;
+                    pos = new Vector2(lastAlone ? 0f : (i % 2 == 0 ? -1f : 1f) * 160f, -250f - (i / 2) * 92f);
                     size = new Vector2(300f, 76f);
                 }
                 else
                 {
-                    pos = new Vector2((i - 1.5f) * 216f, -206f);
-                    size = new Vector2(200f, 56f);
+                    pos = new Vector2((i - (subButtons.Length - 1) * 0.5f) * 212f, -206f);
+                    size = new Vector2(196f, 56f);
                 }
                 UiKit.Place((RectTransform)subButtons[i].transform, c, pos, size);
                 subButtons[i].GetComponentInChildren<TextMeshProUGUI>().fontSize = portrait ? 30 : 24;
             }
-            UiKit.Place(hint.rectTransform, c, new Vector2(0f, portrait ? -420f : -262f), new Vector2(680f, 30f));
+            UiKit.Place(hint.rectTransform, c, new Vector2(0f, portrait ? -512f : -262f), new Vector2(680f, 30f));
             hint.fontSize = portrait ? 22 : 18;
             UiKit.Place(homage.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 18f), new Vector2(portrait ? 660f : 1100f, 60f));
         }

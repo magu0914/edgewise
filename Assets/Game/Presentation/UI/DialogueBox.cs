@@ -48,6 +48,12 @@ namespace Edgewise.Game.UI
         public int VisibleCharacters => _typer.Visible;
         public bool LineComplete => _typer.IsComplete;
         public string SpeakerName => nameText.text;
+
+        /// <summary>本文のうち、いま画面に見えている部分（maxVisibleCharacters まで。テスト用）。</summary>
+        public string VisibleBody => body.text.Substring(0, Mathf.Clamp(body.maxVisibleCharacters, 0, body.text.Length));
+
+        /// <summary>次へ（▼）が出ているか。</summary>
+        public bool NextShown => next.gameObject.activeSelf;
         public PortraitView Portrait => portrait;
         public Button SkipButton => skipButton;
         public Button TapArea => tapArea;

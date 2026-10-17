@@ -17,6 +17,7 @@ namespace Edgewise.Game.App
 {
     /// <summary>
     /// 画面の流れ（DESIGN §8-1）: タイトル → 対戦設定 → 対戦 → 結果（→ 再戦 or 対戦設定へ）。シーンは Main.unity 1 つ。
+    /// タイトルからは図鑑・設定・クレジット・遊び方（8a）も開く。
     /// 星図巡り（DESIGN §12、5b-1）はタイトルの「星図巡り」から CampaignController が受け持つ。
     /// URL のクエリ（WebGL）: ?log = 自動操作用のログ、?seed=N = 配牌と先攻（星図巡りでは新しく始めるときの seed）を固定、
     /// ?speed=x1|x2|instant、?slow=4 = 撮影用のスロー、?bench / ?debug = デバッグシーン（CPU 対 CPU の計測）へ、
@@ -43,6 +44,7 @@ namespace Edgewise.Game.App
         [SerializeField] CreditsScreen credits;
         [SerializeField] TitleFan fan;
         [SerializeField] CampaignController campaign;
+        [SerializeField] HowToScreen howTo;
 
         MatchSettings _settings;
         MatchSettings _last;
@@ -63,6 +65,7 @@ namespace Edgewise.Game.App
         public CreditsScreen Credits => credits;
         public TitleFan Fan => fan;
         public CampaignController Campaign => campaign;
+        public HowToScreen HowTo => howTo;
         public GameAssets Assets => assets;
         public GameObject Table => table;
 
@@ -75,9 +78,10 @@ namespace Edgewise.Game.App
 
         public void Wire(GameAssets a, GameObject tableRoot, TitleScreen t, SetupScreen s, HudView h, MenuPanel m, ResultScreen r, BannerView b,
             MatchController mc, FpsMeter f, SettingsPanel sp, BgmPlayer music, CardDex cardDex, CreditsScreen creditsScreen, TitleFan titleFan,
-            CampaignController campaignController)
+            CampaignController campaignController, HowToScreen howToScreen)
         {
             campaign = campaignController;
+            howTo = howToScreen;
             settings = sp;
             dex = cardDex;
             credits = creditsScreen;
@@ -119,6 +123,8 @@ namespace Edgewise.Game.App
                 }
             };
             credits.Closed += () => ShowTitle(title.CreditsButton);
+            title.HowToPressed += ShowHowTo;
+            howTo.Closed += () => ShowTitle(title.HowToButton);
             setup.BeginPressed += s => StartMatch(s);
             setup.BackPressed += ShowTitle;
             result.AgainPressed += () => StartMatch(_last ?? _settings);
@@ -239,6 +245,7 @@ namespace Edgewise.Game.App
             settings.gameObject.SetActive(false);
             dex.Hide();
             credits.gameObject.SetActive(false);
+            if (howTo != null) howTo.gameObject.SetActive(false);
             fan.Hide();
             banner.Hide();
             hud.SetVisible(false);
@@ -395,6 +402,16 @@ namespace Edgewise.Game.App
             table.SetActive(false);
             fan.Show();
             credits.Open();
+            PlayBgm(BgmCue.Title);
+        }
+
+        /// <summary>遊び方（8a）を開く（タイトルから）。扇のカードは後ろで回り続ける。</summary>
+        public void ShowHowTo()
+        {
+            HideAll();
+            table.SetActive(false);
+            fan.Show();
+            howTo.Open();
             PlayBgm(BgmCue.Title);
         }
 

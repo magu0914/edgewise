@@ -1,6 +1,5 @@
 using System;
 using System.Text;
-using System.Threading;
 using Edgewise.Core.Data;
 using Edgewise.Game.App;
 using Edgewise.Game.View;
@@ -17,6 +16,7 @@ namespace Edgewise.Game.UI
     /// BGM（曲名・作曲者・OpenTracks）、効果音、オマージュの表記。
     /// 本文は ScrollRect（マウスのホイール・タッチのドラッグ）、キーボードは ↑↓ / PageUp・PageDown でスクロール、Esc で閉じる。
     /// 文字はすべて UiText とカード名・ASCII から作る（フォントに焼いた文字だけで表示できるように）。
+    /// エンディングの後に自動で流すエンドロールは別の画面（EndRollScreen。8a）。
     /// </summary>
     public sealed class CreditsScreen : MonoBehaviour, IResponsiveUi
     {
@@ -26,21 +26,9 @@ namespace Edgewise.Game.UI
         [SerializeField] TextMeshProUGUI body;
         [SerializeField] Button closeButton;
 
-        /// <summary>エンディングで自動スクロールする速さ（キャンバス上の px / 秒）。</summary>
-        public const float RollSpeed = 56f;
-
         public event Action Closed;
 
-        bool _rolling;
-        bool _rollSkip;
-
         public bool IsOpen => gameObject.activeSelf;
-
-        /// <summary>エンディングのクレジットを自動で流している途中か。</summary>
-        public bool IsRolling => _rolling;
-
-        /// <summary>流した割合（0〜1。テスト・ログ用）。</summary>
-        public float RollProgress { get; private set; }
         public Button CloseButton => closeButton;
         public string Body => body.text;
         public ScrollRect Scroll => scroll;
@@ -158,100 +146,14 @@ namespace Edgewise.Game.UI
         public void Close()
         {
             if (!IsOpen) return;
-            if (_rolling)
-            {
-                // エンディングで流している途中: 閉じるボタンは「スキップ」（流し終えたことにして呼び出し元に戻す。Closed は出さない）
-                _rollSkip = true;
-                return;
-            }
             gameObject.SetActive(false);
             Closed?.Invoke();
-        }
-
-        /// <summary>エンディングで流しているクレジットを飛ばす（スキップボタン・キー・テスト）。</summary>
-        public void SkipRoll()
-        {
-            if (_rolling) _rollSkip = true;
-        }
-
-        /// <summary>
-        /// エンディング（5c）: クレジットを開いて、上から下へ自動でゆっくり流す（RollSpeed）。最後に「ありがとう」の 1 行。
-        /// 閉じるボタンは「スキップ」になり、押す・Esc / Enter / Space・タップ以外のドラッグはできない（自動で流れるのを妨げない）。
-        /// 流し終えるかスキップされたら閉じて返る（Closed は出さない。戻り先は呼び出し元が決める）。演出速度の設定にかかわらず同じ速さで流す。
-        /// </summary>
-        public async Awaitable PlayRollAsync(CancellationToken ct)
-        {
-            gameObject.SetActive(true);
-            _rolling = true;
-            _rollSkip = false;
-            RollProgress = 0f;
-            var closeLabel = closeButton.GetComponentInChildren<TextMeshProUGUI>();
-            body.text = Compose() + "\n<size=125%><color=#F5D17A>" + UiText.CreditsThanks + "</color></size>\n";
-            closeLabel.text = UiText.CreditsRollSkip;
-            scroll.vertical = false;
-            scroll.StopMovement();
-            var content = scroll.content;
-            content.anchoredPosition = Vector2.zero;
-            EventSystem.current?.SetSelectedGameObject(closeButton.gameObject);
-            if (AutomationLog.Enabled) AutomationLog.Write("credits roll begin");
-            AutomationLog.Buttons("Credits", transform);
-            try
-            {
-                await Awaitable.NextFrameAsync(ct);
-                Canvas.ForceUpdateCanvases();
-                float h = Mathf.Max(0f, content.rect.height - scroll.viewport.rect.height);
-                float t = 0f;
-                while (t < 1.6f && !_rollSkip)
-                {
-                    t += Time.unscaledDeltaTime;
-                    await Awaitable.NextFrameAsync(ct);
-                }
-                float y = 0f;
-                bool logged = false;
-                while (y < h && !_rollSkip)
-                {
-                    y = Mathf.Min(h, y + RollSpeed * Time.unscaledDeltaTime);
-                    content.anchoredPosition = new Vector2(content.anchoredPosition.x, y);
-                    RollProgress = h > 0f ? y / h : 1f;
-                    if (!logged && RollProgress >= 0.25f && AutomationLog.Enabled)
-                    {
-                        logged = true;
-                        AutomationLog.Write("credits rolling");
-                    }
-                    await Awaitable.NextFrameAsync(ct);
-                }
-                RollProgress = 1f;
-                t = 0f;
-                while (t < 3f && !_rollSkip)
-                {
-                    t += Time.unscaledDeltaTime;
-                    await Awaitable.NextFrameAsync(ct);
-                }
-            }
-            finally
-            {
-                if (AutomationLog.Enabled) AutomationLog.Write("credits roll end" + (_rollSkip ? " skipped" : ""));
-                _rolling = false;
-                if (this != null)
-                {
-                    body.text = Compose();
-                    closeLabel.text = UiText.MenuClose;
-                    scroll.vertical = true;
-                    content.anchoredPosition = Vector2.zero;
-                    gameObject.SetActive(false);
-                }
-            }
         }
 
         void Update()
         {
             var kb = Keyboard.current;
             if (kb == null) return;
-            if (_rolling)
-            {
-                if (kb.escapeKey.wasPressedThisFrame || kb.enterKey.wasPressedThisFrame || kb.spaceKey.wasPressedThisFrame) _rollSkip = true;
-                return;
-            }
             if (kb.escapeKey.wasPressedThisFrame || kb.backspaceKey.wasPressedThisFrame)
             {
                 Close();

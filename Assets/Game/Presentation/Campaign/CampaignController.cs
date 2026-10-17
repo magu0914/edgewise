@@ -32,6 +32,7 @@ namespace Edgewise.Game.Campaign
         [SerializeField] RewardScreen reward;
         [SerializeField] ClearedBand cleared;
         [SerializeField] EndingScreen ending;
+        [SerializeField] EndRollScreen endRoll;
 
         CampaignSession _session;
         CampaignFlow _flow;
@@ -62,6 +63,9 @@ namespace Edgewise.Game.Campaign
         public ClearedBand Cleared => cleared;
         public EndingScreen Ending => ending;
 
+        /// <summary>エンディングの後のエンドロール（8a）。</summary>
+        public EndRollScreen EndRoll => endRoll;
+
         /// <summary>結果画面の「次へ」を待っているか（テスト用）。</summary>
         public bool ResultWaiting { get; private set; }
 
@@ -69,7 +73,7 @@ namespace Edgewise.Game.Campaign
         public bool Busy { get; private set; }
 
         public void Wire(AppFlow flow, StarMapScreen m, RegionScreen r, DeckEditScreen d, DialogueBox dlg, RewardScreen rw, ClearedBand band,
-            EndingScreen end)
+            EndingScreen end, EndRollScreen roll)
         {
             app = flow;
             map = m;
@@ -79,6 +83,7 @@ namespace Edgewise.Game.Campaign
             reward = rw;
             cleared = band;
             ending = end;
+            endRoll = roll;
         }
 
         // ------------------------------------------------------------------
@@ -177,6 +182,7 @@ namespace Edgewise.Game.Campaign
             reward.Hide();
             cleared.gameObject.SetActive(false);
             if (ending != null) ending.gameObject.SetActive(false);
+            if (endRoll != null) endRoll.gameObject.SetActive(false);
         }
 
         /// <summary>星図から開いた図鑑を閉じた: 星図に戻る。</summary>
@@ -538,13 +544,15 @@ namespace Edgewise.Game.Campaign
             Run(ct => ending.PlayAsync(CampaignData.Ending, Tf, ct), () => _flow.FinishEnding());
         }
 
-        /// <summary>エンディングの後のクレジット（自動で流れる。スキップ可）→ 星図。後ろではタイトルの扇のカードが回る。</summary>
+        /// <summary>
+        /// エンディングの後のエンドロール（自動で流れる。スキップ可）→ 星図。
+        /// 背景のカードはエンドロール自身が左右に流すので、タイトルの扇は出さない（本文の上に重なるため。8a）。
+        /// </summary>
         void RunEndCredits()
         {
             app.HideAll();
             app.PlayBgm(BgmCue.Title);
-            app.Fan.Show();
-            Run(ct => app.Credits.PlayRollAsync(ct), () => _flow.FinishEndCredits());
+            Run(ct => endRoll.PlayAsync(ct), () => _flow.FinishEndCredits());
         }
     }
 }

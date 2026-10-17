@@ -265,6 +265,43 @@ namespace Edgewise.Game.UI
         public const string CreditsThanks = "最後まで遊んでくれて、ありがとう。";
         public const string CreditsRollSkip = "スキップ";
 
+        // ---- エンドロール（Phase 8a。DESIGN §14-4）: 中央揃え・役割ごとの見出し ----
+        public const string EndRollProduction = "制作";
+        public const string EndRollPlanningRole = "企画・ゲームデザイン・試遊";
+        public const string EndRollPlanningName = "magu";
+        public const string EndRollDevRole = "設計・プログラム・演出";
+        public const string EndRollDevName = "AI エージェント Claude\n（magu の指示と監修のもとで分業）";
+        public const string EndRollArt = "カード絵";
+        public const string EndRollArtBody = "game-icons.net のアイコン（CC BY 3.0）\nLorc ／ Delapouite ／ Caro Asercion ／ Skoll ／ Cathelineau\n星雲と星座をシェーダーで重ねています（改変あり）";
+        public const string EndRollMusic = "音楽";
+        public const string EndRollMusicSource = "OpenTracks のフリー素材";
+        public const string EndRollMusicTitle = "タイトル";
+        public const string EndRollMusicMatch = "対戦";
+        public const string EndRollMusicVictory = "勝利";
+        public const string EndRollMusicDefeat = "敗北";
+        public const string EndRollSfx = "効果音はすべてプログラムで合成した音です";
+        public const string EndRollFont = "フォント";
+        public const string EndRollThanksHeading = "謝辞";
+        public const string EndRollThanksBody = "ルールの仕組みは\nTriple Triad（© SQUARE ENIX）へのオマージュです。\n公式とは無関係です。原作に敬意と感謝を。\n素敵な楽曲と素材の作者の皆さま、\nそして、ここまで遊んでくれたあなたへ。";
+
+        // ---- 遊び方（Phase 8a。DESIGN §14-4） ----
+        public const string TitleHowTo = "遊び方";
+        public const string HowToTitle = "遊び方";
+        public const string HowTo1Title = "1. 交互に置く";
+        public const string HowTo1Body = "手札 5 枚を 1 枚ずつ交互に、3×3 の盤へ置きます。";
+        public const string HowTo2Title = "2. 大きい数字で裏返す";
+        public const string HowTo2Body = "置いたカードの辺が、隣の相手カードの向かい合う辺より大きければ、自分の色に裏返ります。";
+        public const string HowTo2Compare = "7 ＞ 3";
+        public const string HowTo3Title = "3. 枚数で勝負";
+        public const string HowTo3Body = "9 マスが埋まったら終わり。盤の上と手札に残った自分のカードが多い方の勝ち。";
+        public const string HowTo3Score = "6 対 4 で勝ち";
+        public const string HowTo3Hand = "手札";
+        public const string HowTo4Title = "Pivot（本作オリジナル）";
+        public const string HowTo4Body = "置く前にカードを 90° ずつ回して、強い辺を相手に向けられます。回せる回数には限りがあります。";
+        public const string HowToRotateLabel = "90°";
+        public const string HowToRulesNote = "Same・Plus・Combo などの追加ルールは、対戦中の「メニュー」→「ルール確認」で確かめられます。";
+        public const string HowToControls = "操作: ドラッグ＆ドロップ、またはカード → マスの順にタップ。キーボードは矢印で選んで Enter、回転は Q / E。";
+
         public const string SettingsTabBasic = "基本";
         public const string SettingsTabCampaign = "星図巡り";
         public const string SettingsClassic = "原作モード";

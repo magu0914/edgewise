@@ -24,8 +24,15 @@ if (args.serve) {
     const file = normalize(join(root, p));
     if (!file.startsWith(root) || !existsSync(file) || !statSync(file).isFile()) { res.writeHead(404); res.end(); return; }
     // .unityweb は圧縮のまま返す（ビルドは decompressionFallback = true なのでローダーが JS で解凍する）
-    const ext = extname(file).toLowerCase();
-    res.writeHead(200, { 'Content-Type': types[ext] ?? 'application/octet-stream', 'Cache-Control': 'no-store' });
+    // .gz（unityroom 用のビルド。Decompression Fallback オフ）は Content-Encoding: gzip を付けて返し、ブラウザに解凍させる（unityroom のサーバーと同じ）
+    let ext = extname(file).toLowerCase();
+    const headers = { 'Cache-Control': 'no-store' };
+    if (ext === '.gz') {
+      headers['Content-Encoding'] = 'gzip';
+      ext = extname(file.slice(0, -3)).toLowerCase();
+    }
+    headers['Content-Type'] = types[ext] ?? 'application/octet-stream';
+    res.writeHead(200, headers);
     res.end(readFileSync(file));
   });
   await new Promise((r) => server.listen(SERVE_PORT, '127.0.0.1', r));
@@ -50,6 +57,7 @@ const chrome = spawn(CHROME, [
 ], { stdio: 'ignore', windowsHide: true });
 
 let ws;
+let onEvent = null; // CDP のその他のイベント（8a: 画面キャプチャの Page.screencastFrame）
 let nextId = 1;
 const pending = new Map();
 const consoleLines = [];
@@ -88,6 +96,8 @@ async function connect() {
           }
         } else if (m.method === 'Runtime.exceptionThrown') {
           consoleLines.push({ t: Date.now(), line: 'EXCEPTION ' + JSON.stringify(m.params.exceptionDetails).slice(0, 400) });
+        } else if (m.method && onEvent) {
+          onEvent(m);
         }
       };
       return;
@@ -728,7 +738,11 @@ function lastLine(re, from = 0) {
 }
 
 async function clickUi(screen, name, from) {
-  const r = uiRect(screen, name, from);
+  // "screen X" の直後に届く "ui X/..." の行を少し待つ（コンソールの行は 1 行ずつ届くので、まだ来ていないことがある）
+  let r = null;
+  for (let i = 0; i < 40 && !r; i++) {
+    try { r = uiRect(screen, name, from); } catch (e) { if (i === 39) throw e; await sleep(50); }
+  }
   await click(r.x, r.y);
 }
 
@@ -1338,7 +1352,8 @@ async function run5c() {
     await shot('05a_credits_rolling');
     await sleep(3000);
     await shot('05b_credits_rolling_later');
-    await clickUi('Credits', 'CreditsCloseButton', lastLine(/^screen Credits /, es.index).index);
+    // 8a: エンドロールは専用の画面（EndRoll）になった
+    await clickUi('EndRoll', 'EndRollSkipButton', lastLine(/^screen EndRoll /, es.index).index);
     const end = await waitLine(/^credits roll end( skipped)?/, 10000, cr.index);
     checks.creditsEnd = end.line;
     await waitLine(/^campaign EndCredits -> Map/, 10000, cr.index);
@@ -1364,6 +1379,228 @@ async function run5c() {
   log('checks', JSON.stringify(checks));
 }
 
+// ---------------------------------------------------------------------------
+// Phase 8a: タイトル → 遊び方 → フリー対戦 1 局 → 星図巡りで最後の主に勝ちを注入 → エンディングの文 → エンドロール。横 1280×720 と縦 360×640。
+//   node tools/webgl_e2e.mjs --scenario 8a --serve Builds/WebGL --serve-port 8781 --out Logs/shots/8a
+// ---------------------------------------------------------------------------
+
+/** 星図巡りを新しく始め、イオに挑んで勝ち（?forcewin）→ 報酬 → 主の台詞 → 帯 → エンディングの文 → エンドロールを撮って飛ばす。 */
+async function endRollRun(prefix, navAt, titleScreen, titleAt) {
+  await newGameIntro(navAt, {}, titleScreen, titleAt);
+  const talkFrom = await openDeck(4, 2, null);
+  await waitLine(/^talk (first|rematch) gate-elder/, 10000, talkFrom);
+  await skipDialogue(talkFrom, null);
+  const afterIntro = lastLine(/^dialogue end/).index + 1;
+  const nextAt = await takeReward(afterIntro, { owned: ALL_CARDS });
+  await skipDialogue(nextAt, null); // 主の「星域を抜けた」台詞
+  await waitLine(/^cleared shown/, 20000, nextAt);
+  const es = await waitLine(/^ending shown (\d+)/, 30000, nextAt);
+  await sleep(900);
+  await shot(prefix + '_ending_text');
+  await clickUi('Ending', 'EndingTap', es.index);
+  const rb = await waitLine(/^credits roll begin/, 20000, es.index);
+  const at = await waitScreen('EndRoll', rb.index, 10000);
+  await sleep(3500);
+  await shot(prefix + '_endroll_1_title');
+  await waitLine(/^credits rolling/, 60000, rb.index);
+  await sleep(1500);
+  await shot(prefix + '_endroll_2_cards');
+  await sleep(9000);
+  await shot(prefix + '_endroll_3_later');
+  const end = await (async () => {
+    // 最後（ありがとう）まで流れるのを待つ。長すぎたら飛ばす
+    try { await waitLine(/^credits roll thanks/, 120000, rb.index); await sleep(1200); await shot(prefix + '_endroll_4_thanks'); return await waitLine(/^credits roll end/, 15000, rb.index); }
+    catch { await clickUi('EndRoll', 'EndRollSkipButton', at); return await waitLine(/^credits roll end/, 10000, rb.index); }
+  })();
+  await waitLine(/^campaign EndCredits -> Map/, 10000, rb.index);
+  await sleep(600);
+  return end.line;
+}
+
+async function run8a() {
+  results.matches = [];
+  results.rewards = [];
+  const checks = {};
+  // ---------------- 横 1280×720 ----------------
+  let navAt = consoleLines.length;
+  await send('Page.navigate', { url: `${BASE}?log&seed=${SEED}&speed=x2` });
+  const tAt = await waitScreen('Title', navAt, 120000);
+  await move(5, 5);
+  await sleep(2500);
+  await shot('L01_title_with_howto');
+  // 遊び方
+  await clickUi('Title', 'HowToButton', tAt);
+  const hAt = await waitScreen('HowTo', tAt, 10000);
+  await sleep(1100); // 1 コマ目のカードがマスへ動き、2 コマ目が裏返った後
+  await shot('L02_howto');
+  await sleep(1300);
+  await shot('L02b_howto_later');
+  await clickUi('HowTo', 'HowToCloseButton', hAt);
+  const t2 = await waitScreen('Title', hAt, 10000);
+  checks.howTo = true;
+  // フリー対戦 1 局
+  await sleep(500);
+  await clickUi('Title', 'StartButton', t2);
+  const sAt = await waitScreen('Setup', t2, 10000);
+  await sleep(400);
+  await clickUi('Setup', 'BeginButton', sAt);
+  await waitLine(/^match seed=/, 10000, sAt);
+  const r = await playMatch({});
+  const endLine = lastLine(/^end (\d+)-(\d+) (\S+)/);
+  checks.freeMatch = endLine ? endLine.line : `moves ${r.moves}`;
+  const resAt = await waitScreen('Result', Math.max(0, cursor - 5), 60000);
+  await sleep(1200);
+  await shot('L03_free_match_result');
+  // エンドロール（全カード・全星域・イオに勝ちを注入）
+  navAt = consoleLines.length;
+  const grant = ALL_CARDS.filter((id) => !STARTER.includes(id)).join(',');
+  await send('Page.navigate', { url: `${BASE}?log&seed=${+SEED + 1}&speed=x2&grant=${grant}&unlock=all&forcewin=gate-elder` });
+  await waitLine(/^campaign load (\S+) nosave/, 120000, navAt);
+  checks.endRollLandscape = await endRollRun('L04', navAt);
+
+  // ---------------- 縦 360×640 ----------------
+  navAt = consoleLines.length;
+  await send('Page.navigate', { url: `${BASE}?log&seed=${+SEED + 2}&speed=x2&grant=${grant}&unlock=all&forcewin=gate-elder` });
+  await waitLine(/^campaign load (\S+) save/, 120000, navAt);
+  const lt = await waitScreen('Title', navAt, 60000);
+  await sleep(800);
+  await send('Emulation.setDeviceMetricsOverride', { width: 360, height: 640, deviceScaleFactor: 1, mobile: false });
+  const pt = await waitScreen('Portrait', lt, 10000);
+  await sleep(1500);
+  await shot('P01_title_with_howto');
+  await clickUi('Portrait', 'HowToButton', pt);
+  const ph = await waitScreen('HowTo', pt, 10000);
+  await sleep(1100);
+  await shot('P02_howto');
+  await clickUi('HowTo', 'HowToCloseButton', ph);
+  const pt2 = await waitScreen('Title', ph, 10000);
+  await sleep(500);
+  // 前のデータ（イオに勝った）を消して、縦でもう一度エンドロールまで
+  await openSettingsAndErase(pt2, {}, 'Title');
+  checks.endRollPortrait = await endRollRun('P04', pt2, 'Title', pt2);
+  await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
+  results.fps = consoleLines.filter((l) => /^fps/.test(l.line)).map((l) => l.line);
+  results.checks = checks;
+  log('checks', JSON.stringify(checks));
+}
+
+// ---------------------------------------------------------------------------
+// Phase 8a: プレイ動画・GIF の素材（DESIGN §14-2）。CDP の screencast で連番の JPEG を撮り、区間の印（marks）と一緒に保存する。
+//   node tools/webgl_e2e.mjs --scenario media --serve Builds/WebGL --serve-port 8782 --out Logs/media8a
+// タイトルの扇 → フリー対戦で SAME / PLUS から COMBO（ComboSeedFinder の seed）→ 星図巡りで主に勝ち（注入）→ 報酬の NEW! → 帯 → 星図の鍵が外れる。
+// 代表のスクリーンショット（JPEG）も同じ瞬間に撮る。MP4 / GIF への変換は tools/make_media.mjs。
+// ---------------------------------------------------------------------------
+async function runMedia() {
+  results.matches = [];
+  results.rewards = [];
+  const frameDir = join(OUT, 'frames');
+  rmSync(frameDir, { recursive: true, force: true });
+  mkdirSync(frameDir, { recursive: true });
+  const frames = [];
+  const marks = [];
+  const mark = (name) => { marks.push({ name, t: Date.now() }); log('mark', name); };
+  let recording = false;
+  onEvent = (m) => {
+    if (m.method !== 'Page.screencastFrame') return;
+    const p = m.params;
+    send('Page.screencastFrameAck', { sessionId: p.sessionId }).catch(() => {});
+    if (!recording) return;
+    const name = String(frames.length).padStart(6, '0') + '.jpg';
+    writeFileSync(join(frameDir, name), Buffer.from(p.data, 'base64'));
+    frames.push({ file: name, t: Date.now() });
+  };
+  const jpeg = async (name) => {
+    const r = await send('Page.captureScreenshot', { format: 'jpeg', quality: 90 });
+    writeFileSync(join(OUT, name + '.jpg'), Buffer.from(r.data, 'base64'));
+    log('still', name);
+  };
+  await send('Page.startScreencast', { format: 'jpeg', quality: 88, maxWidth: 1280, maxHeight: 720, everyNthFrame: 1 });
+
+  // 1. タイトルの扇
+  let navAt = consoleLines.length;
+  await send('Page.navigate', { url: `${BASE}?log&seed=${SEED}&speed=x1` });
+  const tAt = await waitScreen('Title', navAt, 120000);
+  await move(5, 5);
+  await sleep(1500);
+  recording = true;
+  mark('title');
+  await sleep(4500);
+  await jpeg('title');
+  await sleep(1500);
+  mark('title_end');
+  recording = false;
+
+  // 2. SAME / PLUS から COMBO（決まるまで seed を変える）
+  let combo = null;
+  for (const cs of COMBO_SEEDS) {
+    navAt = consoleLines.length;
+    await send('Page.navigate', { url: `${BASE}?log&seed=${cs}&speed=x1` });
+    const t1 = await waitScreen('Title', navAt, 120000);
+    await sleep(800);
+    await clickUi('Title', 'StartButton', t1);
+    const s1 = await waitScreen('Setup', t1, 10000);
+    await sleep(300);
+    await clickUi('Setup', 'BeginButton', s1);
+    await waitLine(/^match seed=/, 10000, s1);
+    recording = true;
+    mark('match_' + cs);
+    const from = consoleLines.length;
+    let still = false;
+    const rc = await playMatch({ wantCombo: true, alwaysSP: true, onTurn: async () => {} });
+    // 試合中に COMBO ×2 以上が出たか（ログの時刻を印にする）
+    const cb = consoleLines.slice(from).find((l) => /^step ComboBanner x([2-9])/.test(l.line));
+    const rule = cb ? [...consoleLines.slice(from)].filter((l) => /^step RuleBanner/.test(l.line) && l.t <= cb.t).pop() : null;
+    mark('match_end_' + cs);
+    await sleep(1500);
+    recording = false;
+    if (cb) {
+      combo = { seed: cs, rule: rule ? rule.t : cb.t - 1500, combo: cb.t, got: rc.got };
+      still = true;
+      break;
+    }
+    if (!still) log('no combo with seed', cs);
+  }
+  if (!combo) throw new Error('no COMBO with any seed');
+  // 代表のスクリーンショット（COMBO の瞬間）は playMatch の撮影（11_combo_depth2.png）を JPEG にしたものを使う
+
+  // 3. 星図巡り: 新しく始める → 主マーロウに勝ち（注入）→ 報酬の NEW! → 主の台詞 → 帯 → 星図の鍵が外れる
+  navAt = consoleLines.length;
+  await send('Page.navigate', { url: `${BASE}?log&seed=${+SEED + 3}&speed=x1&forcewin=harbor-master` });
+  await waitLine(/^campaign load (\S+) nosave/, 120000, navAt);
+  await newGameIntro(navAt, {});
+  const mapAt = await waitScreen('Map', navAt, 30000);
+  await sleep(800);
+  await jpeg('map');
+  const talkFrom = await openDeck(1, 2, null);
+  await skipDialogue(talkFrom, null);
+  const afterIntro = lastLine(/^dialogue end/).index + 1;
+  // 報酬: 裏向きのカード → 選ぶ → めくれて NEW!
+  recording = true;
+  mark('reward');
+  const nextAt = await takeReward(afterIntro, { owned: STARTER, reveal: 'reward_new' });
+  const rs = lastLine(/^reward shown/);
+  mark('reward_end');
+  recording = false;
+  await skipDialogue(nextAt, null);
+  recording = true;
+  mark('cleared');
+  await waitLine(/^cleared shown/, 20000, nextAt);
+  const ub = await waitLine(/^map unlock library begin/, 20000, nextAt);
+  await waitLine(/^map unlock library done/, 20000, ub.index);
+  await sleep(700);
+  await jpeg('map_unlocked');
+  await sleep(1100);
+  mark('map_end');
+  recording = false;
+  await send('Page.stopScreencast');
+  onEvent = null;
+
+  // NEW! の瞬間のスクリーンショット（takeReward の reveal の撮影 PNG）を残す
+  results.media = { frames: frames.length, marks, combo, rewardShown: rs.line };
+  writeFileSync(join(OUT, 'media.json'), JSON.stringify({ frames, marks, combo, consoleTimes: consoleLines.filter((l) => /^(step (RuleBanner|ComboBanner)|reward (reveal|shown)|cleared shown|map unlock)/.test(l.line)) }, null, 1));
+  log('frames', frames.length);
+}
+
 let exitCode = 0;
 try {
   await connect();
@@ -1372,6 +1609,14 @@ try {
   await send('Runtime.enable');
   await send('Page.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
+  if (args.scenario === '8a') {
+    await run8a();
+    throw { done: true };
+  }
+  if (args.scenario === 'media') {
+    await runMedia();
+    throw { done: true };
+  }
   if (args.scenario === 'title') {
     await runTitle();
     throw { done: true };

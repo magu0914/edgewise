@@ -21,7 +21,7 @@ DESIGN.md §8-2 の BGM の再生基盤（Phase 3c）に曲を入れる手順。
    - 勝敗の場面に曲があるときは、その曲が 3b の合成音のジングル（効果音）の代わりに鳴る。無いときは今までどおり合成音が鳴る。
    - `volume` で曲ごとの音量差をそろえる。`crossfadeTime`（既定 0.8 秒）、ダッキング（`duckLevel` など）もここで調整する。
 3. **ライセンスを記録する**: `docs/CREDITS.md` に曲名・作者・入手先 URL・ライセンスを書く（DESIGN §0）。
-4. **サイズを確かめる**: WebGL をビルドし、`Builds/WebGL/Build/` の合計が **16MB 以下**（DESIGN §8-2）か見る。超えたら下の「品質」を下げる。
+4. **サイズを確かめる**: WebGL をビルドし、`Builds/WebGL/Build/` の合計が **18MB 以下**（DESIGN §8-2）か見る。超えたら下の「品質」を下げる。
 
 `BgmLibrary.asset` は `ProjectSetup` が「無ければ空で作る」だけなので、割り当てた曲は `ProjectSetup` を実行し直しても消えない。
 
