@@ -22,6 +22,9 @@ namespace Edgewise.Game.View
         [SerializeField] TextMeshPro markText;
         [SerializeField] TextMeshPro modText;
 
+        /// <summary>Trait のバッジの漢字 1 字（右下寄りの丸の上。Traits ルールの対戦と図鑑で出す。Phase 6）。</summary>
+        [SerializeField] TextMeshPro traitText;
+
         /// <summary>図鑑の収集表示の枚数（×2）。5b-2。</summary>
         [SerializeField] TextMeshPro countText;
 
@@ -62,11 +65,18 @@ namespace Edgewise.Game.View
         static readonly int QuadSizeId = Shader.PropertyToID("_QuadSize");
         static readonly int PivotId = Shader.PropertyToID("_Pivot");
         static readonly int MarkDirId = Shader.PropertyToID("_MarkDir");
+        static readonly int TraitOnId = Shader.PropertyToID("_TraitOn");
+        static readonly int TraitColorId = Shader.PropertyToID("_TraitColor");
+        static readonly int TraitUsedId = Shader.PropertyToID("_TraitUsed");
+        static readonly int ResonanceId = Shader.PropertyToID("_Resonance");
+        static readonly int ShieldId = Shader.PropertyToID("_Shield");
         Vector2 _markDir;
 
         MaterialPropertyBlock _mpb;
         bool _dirty = true;
         float _glow, _select, _alpha = 1f, _lift, _flash, _emblemRot;
+        bool _showTraits, _traitUsed, _resonance;
+        float _shield;
         Vector2 _tilt;
         Vector2 _tiltTarget;
         Color _glowColor = Color.white;
@@ -142,6 +152,10 @@ namespace Edgewise.Game.View
             modText = Text("Modifier", assets, new Vector2(0.04f, -0.035f), 3.2f, new Vector2(0.6f, 0.4f), assets.fontOutline);
             modText.gameObject.SetActive(false);
             // 図鑑の枚数（ランクのプレートと属性の丸の間）
+            // Trait のバッジの漢字（属性・系統のバッジの下、右の列）。丸と縁はシェーダーが描く
+            traitText = Text("Trait", assets, new Vector2(0.352f, -0.262f), 1.2f, new Vector2(0.17f, 0.17f), assets.fontOutline);
+            traitText.fontStyle = FontStyles.Bold;
+            traitText.gameObject.SetActive(false);
             countText = Text("Count", assets, new Vector2(0.115f, 0.49f), 1.5f, new Vector2(0.26f, 0.18f), assets.fontOutline);
             countText.fontStyle = FontStyles.Bold;
             countText.color = Theme.Gold;
@@ -186,6 +200,9 @@ namespace Edgewise.Game.View
             FaceDown = faceDown || def == null;
             Unknown = false;
             Count = 0;
+            _traitUsed = false;
+            _resonance = false;
+            _shield = 0f;
             _emblemRot = -Rotation * Mathf.PI * 0.5f;
             RefreshTexts();
             _dirty = true;
@@ -241,6 +258,50 @@ namespace Edgewise.Game.View
             modText.gameObject.SetActive(mod != 0 && !FaceDown);
             modText.text = mod > 0 ? "+" + mod : mod < 0 ? "−" + (-mod) : "";
             modText.color = mod > 0 ? new Color(0.55f, 1f, 0.6f) : new Color(1f, 0.55f, 0.55f);
+        }
+
+        /// <summary>Trait のバッジを出すか。Traits ルールの対戦と図鑑で true にする（既定は false）。</summary>
+        public void SetTraitsEnabled(bool on)
+        {
+            if (_showTraits == on) return;
+            _showTraits = on;
+            RefreshTexts();
+            _dirty = true;
+        }
+
+        /// <summary>Trait のバッジを出している（カードが Trait を持ち、表示が ON で、表向き）。</summary>
+        public bool TraitBadgeVisible => _showTraits && Def != null && Def.Trait.HasValue && !FaceDown && !Unknown;
+
+        /// <summary>バッジの漢字（出していなければ空）。</summary>
+        public string TraitBadgeText => traitText != null && traitText.gameObject.activeSelf ? traitText.text : "";
+
+        /// <summary>Guard を使い切った（バッジをくすませる）。</summary>
+        public void SetTraitUsed(bool used)
+        {
+            if (_traitUsed == used) return;
+            _traitUsed = used;
+            if (traitText != null) traitText.alpha = used ? 0.4f * _alpha : _alpha;
+            _dirty = true;
+        }
+
+        public bool TraitUsed => _traitUsed;
+
+        /// <summary>共鳴している（縁が系統の色で光る）。</summary>
+        public void SetResonance(bool on)
+        {
+            if (_resonance == on) return;
+            _resonance = on;
+            _dirty = true;
+        }
+
+        public bool Resonating => _resonance;
+
+        /// <summary>Guard が防いだ演出の盾の強さ（0..1）。</summary>
+        public void SetShield(float amount)
+        {
+            if (Mathf.Approximately(_shield, amount)) return;
+            _shield = amount;
+            _dirty = true;
         }
 
         public void SetGlow(float amount, Color color)
@@ -336,6 +397,7 @@ namespace Edgewise.Game.View
             tribeText.alpha = alpha;
             markText.alpha = alpha;
             modText.alpha = alpha;
+            if (traitText != null) traitText.alpha = _traitUsed ? 0.4f * alpha : alpha;
             if (countText != null) countText.alpha = alpha;
             _dirty = true;
         }
@@ -351,6 +413,7 @@ namespace Edgewise.Game.View
             tribeText.sortingOrder = order * 10 + 2;
             markText.sortingOrder = order * 10 + 2;
             modText.sortingOrder = order * 10 + 3;
+            if (traitText != null) traitText.sortingOrder = order * 10 + 3;
             if (countText != null) countText.sortingOrder = order * 10 + 3;
         }
 
@@ -364,6 +427,18 @@ namespace Edgewise.Game.View
             nameText.gameObject.SetActive(show);
             elementText.gameObject.SetActive(show && Def.Element.HasValue);
             tribeText.gameObject.SetActive(show && Def.Tribe.HasValue);
+            if (traitText != null)
+            {
+                bool trait = show && _showTraits && Def.Trait.HasValue;
+                traitText.gameObject.SetActive(trait);
+                if (trait)
+                {
+                    var tc = Theme.TraitColor(Def.Trait.Value);
+                    traitText.text = Theme.TraitGlyph(Def.Trait.Value);
+                    traitText.color = Color.Lerp(tc, Color.white, 0.6f);
+                    traitText.alpha = _traitUsed ? 0.4f * _alpha : _alpha;
+                }
+            }
             markText.gameObject.SetActive(!Unknown);
             markText.text = Theme.Mark(Owner);
             markText.color = Theme.OwnerColor(Owner);
@@ -406,8 +481,14 @@ namespace Edgewise.Game.View
             _mpb.SetFloat(LiftId, _lift);
             _mpb.SetFloat(FlashId, _flash);
             _mpb.SetVector(QuadSizeId, QuadSize);
+            _mpb.SetFloat(ResonanceId, _resonance ? 1f : 0f);
+            _mpb.SetFloat(ShieldId, _shield);
+            _mpb.SetFloat(TraitUsedId, _traitUsed ? 1f : 0f);
             if (Def != null)
             {
+                bool traitOn = _showTraits && Def.Trait.HasValue;
+                _mpb.SetFloat(TraitOnId, traitOn ? 1f : 0f);
+                _mpb.SetColor(TraitColorId, traitOn ? Theme.TraitColor(Def.Trait.Value) : Color.white);
                 var entry = art != null ? art.Find(Def.Id) : null;
                 _mpb.SetColor(ElemColorId, Theme.ElementColor(Def.Element));
                 _mpb.SetFloat(ElemOnId, Def.Element.HasValue ? 1f : 0f);
@@ -431,6 +512,7 @@ namespace Edgewise.Game.View
             }
             else
             {
+                _mpb.SetFloat(TraitOnId, 0f);
                 _mpb.SetVector(ArtCountId, Vector4.zero);
                 _mpb.SetFloat(ElemOnId, 0);
                 _mpb.SetFloat(TribeOnId, 0);

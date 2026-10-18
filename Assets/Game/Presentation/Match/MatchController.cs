@@ -513,6 +513,7 @@ namespace Edgewise.Game.Match
                 {
                     var card = _pool[k++];
                     card.gameObject.SetActive(true);
+                    card.SetTraitsEnabled(State.Rules.Traits);
                     card.Bind(State.Cards[ids[i]], who, 0, FaceDown(who));
                     card.SetModifier(0);
                     card.SetGlow(0f, Color.white);
@@ -581,6 +582,7 @@ namespace Edgewise.Game.Match
                     if (idx < 0) idx = 0;
                     var card = available[idx];
                     available.RemoveAt(idx);
+                    card.SetTraitsEnabled(State.Rules.Traits);
                     card.Bind(State.Cards[ids[i]], who, 0, FaceDown(who));
                     card.SetModifier(0);
                     card.transform.rotation = Quaternion.identity;

@@ -272,17 +272,17 @@ namespace Edgewise.Game.UI
             }
             if (portrait)
             {
-                UiKit.Place(rulesNote.rectTransform, c, new Vector2(0f, -380f), new Vector2(640f, 60f));
-                rulesNote.fontSize = 21;
-                UiKit.Place(controls.rectTransform, c, new Vector2(0f, -440f), new Vector2(640f, 56f));
+                UiKit.Place(rulesNote.rectTransform, c, new Vector2(0f, -392f), new Vector2(640f, 76f));
+                rulesNote.fontSize = 20;
+                UiKit.Place(controls.rectTransform, c, new Vector2(0f, -456f), new Vector2(640f, 40f));
                 controls.fontSize = 18;
                 UiKit.Place((RectTransform)closeButton.transform, new Vector2(0.5f, 0f), new Vector2(0f, 20f), new Vector2(280f, 76f));
             }
             else
             {
-                UiKit.Place(rulesNote.rectTransform, c, new Vector2(0f, -188f), new Vector2(1160f, 30f));
+                UiKit.Place(rulesNote.rectTransform, c, new Vector2(0f, -192f), new Vector2(1160f, 46f));
                 rulesNote.fontSize = 18;
-                UiKit.Place(controls.rectTransform, c, new Vector2(0f, -220f), new Vector2(1160f, 28f));
+                UiKit.Place(controls.rectTransform, c, new Vector2(0f, -238f), new Vector2(1160f, 28f));
                 controls.fontSize = 16;
                 UiKit.Place((RectTransform)closeButton.transform, new Vector2(0.5f, 0f), new Vector2(0f, 18f), new Vector2(220f, 56f));
             }

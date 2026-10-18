@@ -45,6 +45,9 @@ namespace Edgewise.Game.UI
         [SerializeField] Image infoPanel;
         [SerializeField] TextMeshProUGUI infoName;
         [SerializeField] TextMeshProUGUI infoMeta;
+
+        /// <summary>固有能力（Trait）の名前と説明。Trait のないカードでは空（Phase 6）。</summary>
+        [SerializeField] TextMeshProUGUI infoTrait;
         [SerializeField] TextMeshProUGUI infoCredit;
         [SerializeField] Button prevButton;
         [SerializeField] Button nextButton;
@@ -84,6 +87,7 @@ namespace Edgewise.Game.UI
         public Button ViewButton => viewButton;
         public string CountText => count.text;
         public string InfoName => infoName.text;
+        public string InfoTrait => infoTrait != null ? infoTrait.text : "";
 
         /// <summary>手持ちの枚数（収集状況の表示でないときは -1）。</summary>
         public int OwnedCount(string id) => !_collectionView ? -1 : _collection != null && _collection.TryGetValue(id, out int n) ? n : 0;
@@ -133,6 +137,10 @@ namespace Edgewise.Game.UI
             infoName.fontSizeMin = 20;
             infoName.fontSizeMax = 34;
             infoMeta = UiKit.Label(p, "InfoMeta", a, "", 24, Theme.Ink, TextAlignmentOptions.Left);
+            infoTrait = UiKit.Label(p, "InfoTrait", a, "", 22, Theme.Ink, TextAlignmentOptions.TopLeft);
+            infoTrait.enableAutoSizing = true;
+            infoTrait.fontSizeMin = 14;
+            infoTrait.fontSizeMax = 22;
             infoCredit = UiKit.Label(p, "InfoCredit", a, "", 17, Theme.InkDim, TextAlignmentOptions.Left);
             prevButton = UiKit.Button(r, "DexPrevButton", a, UiText.DexPrev, 24, out _);
             nextButton = UiKit.Button(r, "DexNextButton", a, UiText.DexNext, 24, out _);
@@ -195,10 +203,11 @@ namespace Edgewise.Game.UI
                 UiKit.Place(hint.rectTransform, bottom, new Vector2(0f, 10f), new Vector2(680f, 34f));
                 UiKit.Place(focusName.rectTransform, bottom, new Vector2(0f, 48f), new Vector2(680f, 40f));
                 // 拡大表示: カードは上、説明は下
-                UiKit.Place((RectTransform)infoPanel.transform, bottom, new Vector2(0f, 200f), new Vector2(680f, 250f));
-                UiKit.Place(infoName.rectTransform, new Vector2(0f, 1f), new Vector2(26f, -18f), new Vector2(630f, 52f));
-                UiKit.Place(infoMeta.rectTransform, new Vector2(0f, 1f), new Vector2(26f, -78f), new Vector2(630f, 40f));
-                UiKit.Place(infoCredit.rectTransform, new Vector2(0f, 1f), new Vector2(26f, -126f), new Vector2(630f, 110f));
+                UiKit.Place((RectTransform)infoPanel.transform, bottom, new Vector2(0f, 200f), new Vector2(680f, 296f));
+                UiKit.Place(infoName.rectTransform, new Vector2(0f, 1f), new Vector2(26f, -14f), new Vector2(630f, 52f));
+                UiKit.Place(infoMeta.rectTransform, new Vector2(0f, 1f), new Vector2(26f, -68f), new Vector2(630f, 40f));
+                UiKit.Place(infoTrait.rectTransform, new Vector2(0f, 1f), new Vector2(26f, -112f), new Vector2(630f, 84f));
+                UiKit.Place(infoCredit.rectTransform, new Vector2(0f, 1f), new Vector2(26f, -202f), new Vector2(630f, 84f));
                 UiKit.Place((RectTransform)prevButton.transform, bottom, new Vector2(-230f, 104f), new Vector2(200f, 80f));
                 UiKit.Place((RectTransform)listButton.transform, bottom, new Vector2(0f, 104f), new Vector2(200f, 80f));
                 UiKit.Place((RectTransform)nextButton.transform, bottom, new Vector2(230f, 104f), new Vector2(200f, 80f));
@@ -220,8 +229,9 @@ namespace Edgewise.Game.UI
                 // 拡大表示: カードは左、説明は右
                 UiKit.Place((RectTransform)infoPanel.transform, new Vector2(1f, 0.5f), new Vector2(-40f, 40f), new Vector2(520f, 300f));
                 UiKit.Place(infoName.rectTransform, new Vector2(0f, 1f), new Vector2(28f, -22f), new Vector2(470f, 52f));
-                UiKit.Place(infoMeta.rectTransform, new Vector2(0f, 1f), new Vector2(28f, -84f), new Vector2(470f, 40f));
-                UiKit.Place(infoCredit.rectTransform, new Vector2(0f, 1f), new Vector2(28f, -136f), new Vector2(470f, 150f));
+                UiKit.Place(infoMeta.rectTransform, new Vector2(0f, 1f), new Vector2(28f, -78f), new Vector2(470f, 40f));
+                UiKit.Place(infoTrait.rectTransform, new Vector2(0f, 1f), new Vector2(28f, -122f), new Vector2(470f, 84f));
+                UiKit.Place(infoCredit.rectTransform, new Vector2(0f, 1f), new Vector2(28f, -212f), new Vector2(470f, 80f));
                 UiKit.Place((RectTransform)prevButton.transform, new Vector2(1f, 0.5f), new Vector2(-405f, -170f), new Vector2(150f, 60f));
                 UiKit.Place((RectTransform)listButton.transform, new Vector2(1f, 0.5f), new Vector2(-235f, -170f), new Vector2(150f, 60f));
                 UiKit.Place((RectTransform)nextButton.transform, new Vector2(1f, 0.5f), new Vector2(-65f, -170f), new Vector2(150f, 60f));
@@ -324,12 +334,14 @@ namespace Edgewise.Game.UI
             {
                 var c = Instantiate(assets.cardPrefab, worldRoot);
                 c.name = "Dex " + CardCatalog.All[i].Id;
+                c.SetTraitsEnabled(true); // 図鑑では Trait のバッジを常に出す（対戦では Traits ルールが ON のときだけ）
                 c.Bind(CardCatalog.All[i], Player.P0, 0, false);
                 c.SetOrder(20);
                 _cards.Add(c);
             }
             _zoomCard = Instantiate(assets.cardPrefab, worldRoot);
             _zoomCard.name = "Dex Zoom";
+            _zoomCard.SetTraitsEnabled(true);
             _zoomCard.gameObject.SetActive(false);
         }
 
@@ -387,6 +399,7 @@ namespace Edgewise.Game.UI
                 infoMeta.text = UiText.DexElement + "  " + ElementName(def.Element) + "　　" + UiText.DexTribe + "  " + TribeName(def.Tribe)
                     + (_collectionView ? "　　" + UiText.DexOwned + OwnedCount(def.Id) : "");
             }
+            infoTrait.text = !unknown && def.Trait.HasValue ? TraitInfoText(def.Trait.Value) : "";
             infoCredit.text = UiText.DexIcon + ": " + (unknown ? UiText.DexCreditHidden : table != null ? table.CreditLine(def.Id) : "");
             _pointerIdle = 99f;
             if (AutomationLog.Enabled)
@@ -398,6 +411,14 @@ namespace Edgewise.Game.UI
                     + F(corner.x - s.x) + " " + F(corner.y - s.y));
                 AutomationLog.Buttons("DexZoom", transform);
             }
+        }
+
+        /// <summary>図鑑の拡大表示の固有能力の説明（名前＝漢字 1 字 + 名前、1 行の説明、使えるルール）。</summary>
+        public static string TraitInfoText(TraitId t)
+        {
+            string color = ColorUtility.ToHtmlStringRGB(Theme.TraitColor(t));
+            return "<color=#" + color + "><b>" + UiText.DexTrait + "  " + Theme.TraitGlyph(t) + " " + UiText.TraitName(t) + "</b></color>\n"
+                + UiText.TraitDesc(t) + "\n<size=75%><color=#A8B3D1>" + UiText.DexTraitNote + "</color></size>";
         }
 
         public void StepZoom(int dir)
@@ -428,7 +449,7 @@ namespace Edgewise.Game.UI
             {
                 // 上 132px の見出しの下から、下の説明パネル（下から 450px）の上まで
                 float top = h * 0.5f - h * (132f / 1280f) - 0.12f;
-                float bottomY = -h * 0.5f + h * (470f / 1280f);
+                float bottomY = -h * 0.5f + h * (516f / 1280f);
                 float scale = Mathf.Min((top - bottomY) / CardView.Size.y, w * 0.8f / CardView.Size.x);
                 return (new Vector3(0f, (top + bottomY) * 0.5f, -0.2f), scale);
             }

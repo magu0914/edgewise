@@ -1490,6 +1490,84 @@ async function run8a() {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 6: Resonance と Traits を ON にしたフリー対戦を 1 局通し、図鑑で Trait の説明を確かめる。
+//   node tools/webgl_e2e.mjs --scenario 6 --serve Builds/WebGL --serve-port 8793 --port 9393 --out Logs/shots/6
+// 対戦設定で「上級 Lv6〜10」と Resonance・Traits を押す（Trait は Lv7〜10 のカードだけ）→ 1 局 → 盤の上にバッジ（漢字 1 字）と共鳴の縁。
+// 判定用の確認の画像は OUT + "-check" に保存する（提出用は OUT の 2 枚だけ）。
+// ---------------------------------------------------------------------------
+async function run6() {
+  results.matches = [];
+  const checks = {};
+  const checkDir = OUT + '-check';
+  mkdirSync(checkDir, { recursive: true });
+  async function checkShot(name) {
+    const r = await send('Page.captureScreenshot', { format: 'png' });
+    writeFileSync(join(checkDir, name + '.png'), Buffer.from(r.data, 'base64'));
+  }
+  let navAt = consoleLines.length;
+  await send('Page.navigate', { url: `${BASE}?log&seed=${SEED}&speed=x2` });
+  const tAt = await waitScreen('Title', navAt, 120000);
+  await move(5, 5);
+  await sleep(1200);
+  await clickUi('Title', 'StartButton', tAt);
+  const sAt = await waitScreen('Setup', tAt, 10000);
+  await sleep(500);
+  await checkShot('00_setup_before');
+  await clickUi('Setup', 'Band2', sAt);
+  await clickUi('Setup', 'Rule_Resonance', sAt);
+  await clickUi('Setup', 'Rule_Traits', sAt);
+  await sleep(500);
+  await checkShot('01_setup_rules_on');
+  await clickUi('Setup', 'BeginButton', sAt);
+  const m = await waitLine(/^match seed=(\d+) rules=(\d+) first=(\d)/, 20000, sAt);
+  checks.rules = m.m[2];
+  if (!m.m[2].endsWith('11')) throw new Error('Resonance and Traits are not ON: ' + m.m[2]);
+  let shotTaken = false;
+  const r = await playMatch({
+    onTurn: async (moves, turn) => {
+      // 4 手目以降の自分の手番: 盤にカードが並んだところ（バッジと共鳴の縁が見える）
+      if (!shotTaken && moves >= 2) {
+        await move(5, 5);
+        await sleep(900);
+        await shot('01_match_trait_badges');
+        shotTaken = true;
+      }
+    },
+  });
+  log('match finished', r.moves, 'moves');
+  const resAt = await waitScreen('Result', Math.max(0, cursor - 5), 60000);
+  await sleep(800);
+  await checkShot('02_result');
+  checks.guardSteps = consoleLines.filter((l) => /^step Trait /.test(l.line)).map((l) => l.line);
+  checks.pierceOrOtherTraitsOnBoard = consoleLines.filter((l) => /^await turn=/.test(l.line)).length;
+  const endLine = lastLine(/^end (\d+)-(\d+) (\S+)/);
+  checks.end = endLine ? endLine.line : null;
+  if (!endLine) throw new Error('the match did not end');
+
+  // ---- 図鑑: Trait のあるカードの拡大 ----
+  navAt = consoleLines.length;
+  await send('Page.navigate', { url: `${BASE}?log&seed=${SEED}&speed=x2` });
+  const t2 = await waitScreen('Title', navAt, 120000);
+  await move(5, 5);
+  await sleep(1000);
+  await clickUi('Title', 'DexButton', t2);
+  const dAt = (await waitLine(/^dex list landscape/, 10000, t2)).index;
+  await move(5, 5);
+  await sleep(1200);
+  await checkShot('03_dex_list');
+  const listAt = lastIndex(/^screen Dex \d/);
+  await zoomCard('leomane', listAt, '02_dex_trait_pierce', false);
+  const back = consoleLines.length;
+  await key('Escape');
+  await waitLine(/^dex list/, 5000, back);
+  await sleep(300);
+  await zoomCard('auroraveil', lastIndex(/^screen Dex \d/), '03_dex_trait_guard_check', false);
+  results.checks = checks;
+  results.fps = consoleLines.filter((l) => /^fps/.test(l.line)).map((l) => l.line);
+  log('checks', JSON.stringify(checks));
+}
+
+// ---------------------------------------------------------------------------
 // Phase 8a: プレイ動画・GIF の素材（DESIGN §14-2）。CDP の screencast で連番の JPEG を撮り、区間の印（marks）と一緒に保存する。
 //   node tools/webgl_e2e.mjs --scenario media --serve Builds/WebGL --serve-port 8782 --out Logs/media8a
 // タイトルの扇 → フリー対戦で SAME / PLUS から COMBO（ComboSeedFinder の seed）→ 星図巡りで主に勝ち（注入）→ 報酬の NEW! → 帯 → 星図の鍵が外れる。
@@ -1847,6 +1925,10 @@ try {
   await send('Runtime.enable');
   await send('Page.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
+  if (args.scenario === '6') {
+    await run6();
+    throw { done: true };
+  }
   if (args.scenario === '8a') {
     await run8a();
     throw { done: true };

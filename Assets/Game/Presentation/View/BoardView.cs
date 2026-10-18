@@ -179,6 +179,32 @@ namespace Edgewise.Game.View
             r.SetPropertyBlock(_mpb);
         }
 
+        /// <summary>
+        /// 共鳴の縁を更新する（Resonance ルール）。同じ所有者・同じ系統のカードが縦横に隣り合っているカードを光らせる。
+        /// エンジンの Board.IsResonant と同じ規則を、表示している CardView の状態から決める（勝敗は決めない）。enabled = false なら全部消す。
+        /// </summary>
+        public void RefreshResonance(bool enabled)
+        {
+            for (int c = 0; c < Placed.Length; c++)
+            {
+                var card = Placed[c];
+                if (card == null) continue;
+                bool on = false;
+                var tribe = card.Def?.Tribe;
+                if (enabled && tribe.HasValue)
+                {
+                    for (int dir = 0; dir < 4 && !on; dir++)
+                    {
+                        int n = Edgewise.Core.Board.Neighbor(c, dir);
+                        if (n == GameConstants.Wall) continue;
+                        var other = Placed[n];
+                        on = other != null && other.Owner == card.Owner && other.Def != null && other.Def.Tribe == tribe;
+                    }
+                }
+                card.SetResonance(on);
+            }
+        }
+
         public void ClearPlaced()
         {
             for (int i = 0; i < Placed.Length; i++) Placed[i] = null;

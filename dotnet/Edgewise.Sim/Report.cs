@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using Edgewise.Core;
 
 namespace Edgewise.Sim
 {
@@ -37,7 +38,7 @@ namespace Edgewise.Sim
 
         static double Ms(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;
 
-        public static string Build(IReadOnlyList<MatchResult> results, string header)
+        public static string Build(IReadOnlyList<MatchResult> results, string header, IReadOnlyList<(MatchResult On, MatchResult Off)> baselines = null)
         {
             var sb = new StringBuilder();
             if (!string.IsNullOrEmpty(header)) sb.AppendLine(header).AppendLine();
@@ -226,7 +227,85 @@ namespace Edgewise.Sim
                 }
             }
             sb.AppendLine();
+            if (baselines != null && baselines.Count > 0) AppendTraitSections(sb, baselines);
             return sb.ToString();
+        }
+
+        /// <summary>Trait 付きのカードを含む手札の成績と、カード別の成績。Traits ON と、同じ配牌・同じ seed の Traits OFF（対照）を並べる。</summary>
+        static void AppendTraitSections(StringBuilder sb, IReadOnlyList<(MatchResult On, MatchResult Off)> baselines)
+        {
+            sb.AppendLine("### Trait 付きのカードを含む手札の勝率（ちょうど片方だけが Trait 付きのカードを含む配牌。引き分けを除く。Off = 同じ配牌で Traits だけ OFF の対照）");
+            sb.AppendLine();
+            sb.AppendLine("Trait 付きのカードは Lv7〜10 なので、含む手札は元々強い。Traits の効果そのものは「ON − OFF」の差で見る。");
+            sb.AppendLine();
+            sb.AppendLine("| Rules | A vs B | Games with exactly one trait hand (ON / OFF) | Trait hand win rate ON | Trait hand win rate OFF | ON − OFF (points) |");
+            sb.AppendLine("|---|---|---:|---:|---:|---:|");
+            foreach (var (on, off) in baselines)
+            {
+                var a = on.Stats;
+                var b = off.Stats;
+                long nOn = a.TraitHandWins + a.TraitHandLosses;
+                long nOff = b.TraitHandWins + b.TraitHandLosses;
+                double pOn = nOn == 0 ? 0 : 100.0 * a.TraitHandWins / nOn;
+                double pOff = nOff == 0 ? 0 : 100.0 * b.TraitHandWins / nOff;
+                sb.Append("| ").Append(on.Preset.Name).Append(" | ").Append(on.A.Label).Append(" vs ").Append(on.B.Label)
+                    .Append(" | ").Append(nOn + a.TraitHandDraws).Append(" / ").Append(nOff + b.TraitHandDraws)
+                    .Append(" | ").Append(PctCi(a.TraitHandWins, nOn))
+                    .Append(" | ").Append(PctCi(b.TraitHandWins, nOff))
+                    .Append(" | ").Append(F(pOn - pOff, "+0.0;-0.0;0.0"))
+                    .AppendLine(" |");
+            }
+            sb.AppendLine();
+
+            foreach (var (on, off) in baselines)
+            {
+                sb.AppendLine("### カード別の勝率（持ち主の勝率。引き分けを除く）: " + on.Preset.Name + " / " + on.A.Label + " vs " + on.B.Label);
+                sb.AppendLine();
+                sb.AppendLine("| Card | Lv | Trait | Games held | Win rate ON | Win rate OFF | ON − OFF (points) |");
+                sb.AppendLine("|---|---:|---|---:|---:|---:|---:|");
+                var cards = SimCards.All;
+                for (int i = 0; i < cards.Count; i++)
+                {
+                    var c = cards[i];
+                    if (!c.Trait.HasValue) continue;
+                    long wOn = on.Stats.CardWins[i], lOn = on.Stats.CardLosses[i];
+                    long wOff = off.Stats.CardWins[i], lOff = off.Stats.CardLosses[i];
+                    double pOn = wOn + lOn == 0 ? 0 : 100.0 * wOn / (wOn + lOn);
+                    double pOff = wOff + lOff == 0 ? 0 : 100.0 * wOff / (wOff + lOff);
+                    sb.Append("| ").Append(c.Id).Append(" | ").Append(c.Level).Append(" | ").Append(c.Trait.Value.ToId())
+                        .Append(" | ").Append(on.Stats.CardGames[i])
+                        .Append(" | ").Append(PctCi(wOn, wOn + lOn))
+                        .Append(" | ").Append(PctCi(wOff, wOff + lOff))
+                        .Append(" | ").Append(F(pOn - pOff, "+0.0;-0.0;0.0"))
+                        .AppendLine(" |");
+                }
+                // 集計: Trait 付きのカードと、同じ Lv7〜10 で Trait のないカード（Trait の有無だけの比較になる）
+                foreach (bool withTrait in new[] { true, false })
+                {
+                    long wOn = 0, lOn = 0, wOff = 0, lOff = 0, held = 0;
+                    int count = 0;
+                    for (int i = 0; i < cards.Count; i++)
+                    {
+                        var c = cards[i];
+                        if (c.Level < 7 || c.Trait.HasValue != withTrait) continue;
+                        wOn += on.Stats.CardWins[i];
+                        lOn += on.Stats.CardLosses[i];
+                        wOff += off.Stats.CardWins[i];
+                        lOff += off.Stats.CardLosses[i];
+                        held += on.Stats.CardGames[i];
+                        count++;
+                    }
+                    double pOn = wOn + lOn == 0 ? 0 : 100.0 * wOn / (wOn + lOn);
+                    double pOff = wOff + lOff == 0 ? 0 : 100.0 * wOff / (wOff + lOff);
+                    sb.Append("| **").Append(withTrait ? "All Lv7-10 cards with a Trait (" : "All Lv7-10 cards without a Trait (").Append(count).Append(")**")
+                        .Append(" | | | ").Append(held)
+                        .Append(" | ").Append(PctCi(wOn, wOn + lOn))
+                        .Append(" | ").Append(PctCi(wOff, wOff + lOff))
+                        .Append(" | ").Append(F(pOn - pOff, "+0.0;-0.0;0.0"))
+                        .AppendLine(" |");
+                }
+                sb.AppendLine();
+            }
         }
 
         static string NodesCell(Stats s, int side)

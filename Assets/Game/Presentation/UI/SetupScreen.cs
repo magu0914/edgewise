@@ -14,7 +14,10 @@ namespace Edgewise.Game.UI
     /// </summary>
     public sealed class SetupScreen : MonoBehaviour, IResponsiveUi
     {
-        public const int RuleCount = 9;
+        public const int RuleCount = 11;
+
+        /// <summary>ルール一覧の並び（Open, Random, Same, Same Wall, Plus, Combo, Elemental, Sudden Death, Pivot, Resonance, Traits）での Pivot の位置。</summary>
+        public const int PivotIndex = 8;
 
         [SerializeField] TextMeshProUGUI title;
         [SerializeField] TextMeshProUGUI difficultyLabel;
@@ -54,13 +57,14 @@ namespace Edgewise.Game.UI
         static readonly string[] RuleNames =
         {
             UiText.RuleOpen, UiText.RuleRandom, UiText.RuleSame, UiText.RuleSameWall, UiText.RulePlus, UiText.RuleCombo,
-            UiText.RuleElemental, UiText.RuleSuddenDeath, UiText.RulePivot,
+            UiText.RuleElemental, UiText.RuleSuddenDeath, UiText.RulePivot, UiText.RuleResonance, UiText.RuleTraits,
         };
 
         static readonly string[] RuleDescs =
         {
             UiText.RuleOpenDesc, UiText.RuleRandomDesc, UiText.RuleSameDesc, UiText.RuleSameWallDesc, UiText.RulePlusDesc,
-            UiText.RuleComboDesc, UiText.RuleElementalDesc, UiText.RuleSuddenDeathDesc, UiText.RulePivotDesc,
+            UiText.RuleComboDesc, UiText.RuleElementalDesc, UiText.RuleSuddenDeathDesc, UiText.RulePivotDesc, UiText.RuleResonanceDesc,
+            UiText.RuleTraitsDesc,
         };
 
         /// <summary>ルール i の名前（ログ・テスト用）。</summary>
@@ -166,7 +170,9 @@ namespace Edgewise.Game.UI
                 case 5: return _settings.combo;
                 case 6: return _settings.elemental;
                 case 7: return _settings.suddenDeath;
-                default: return _settings.pivot;
+                case 8: return _settings.pivot;
+                case 9: return _settings.resonance;
+                default: return _settings.traits;
             }
         }
 
@@ -182,7 +188,9 @@ namespace Edgewise.Game.UI
                 case 5: _settings.combo = v; break;
                 case 6: _settings.elemental = v; break;
                 case 7: _settings.suddenDeath = v; break;
-                default: _settings.pivot = v; break;
+                case 8: _settings.pivot = v; break;
+                case 9: _settings.resonance = v; break;
+                default: _settings.traits = v; break;
             }
         }
 
@@ -207,7 +215,7 @@ namespace Edgewise.Game.UI
                 UiKit.Place((RectTransform)backButton.transform, top, new Vector2(lx - 170f, -570f), new Vector2(160f, 60f));
                 float rx = 310f;
                 UiKit.Place(rulesLabel.rectTransform, top, new Vector2(rx, -100f), new Vector2(640f, 34f));
-                for (int i = 0; i < RuleCount; i++) LayoutRule(i, top, new Vector2(rx, -138f - i * 60f), new Vector2(640f, 54f));
+                for (int i = 0; i < RuleCount; i++) LayoutRule(i, top, new Vector2(rx, -138f - i * 50f), new Vector2(640f, 46f));
             }
             else
             {
@@ -220,10 +228,10 @@ namespace Edgewise.Game.UI
                 for (int i = 0; i < 3; i++)
                     UiKit.Place((RectTransform)bandButtons[i].transform, top, new Vector2(-220f + i * 220f, -228f), new Vector2(206f, 62f));
                 UiKit.Place(rulesLabel.rectTransform, top, new Vector2(0f, -304f), new Vector2(660f, 34f));
-                for (int i = 0; i < RuleCount; i++) LayoutRule(i, top, new Vector2(0f, -340f - i * 78f), new Vector2(680f, 72f), true);
-                UiKit.Place((RectTransform)onlineButton.transform, top, new Vector2(0f, -1152f), new Vector2(520f, 76f));
-                UiKit.Place((RectTransform)backButton.transform, top, new Vector2(-210f, -1062f), new Vector2(220f, 80f));
-                UiKit.Place((RectTransform)beginButton.transform, top, new Vector2(110f, -1056f), new Vector2(380f, 92f));
+                for (int i = 0; i < RuleCount; i++) LayoutRule(i, top, new Vector2(0f, -340f - i * 66f), new Vector2(680f, 62f), true);
+                UiKit.Place((RectTransform)onlineButton.transform, top, new Vector2(0f, -1186f), new Vector2(520f, 64f));
+                UiKit.Place((RectTransform)backButton.transform, top, new Vector2(-210f, -1092f), new Vector2(220f, 76f));
+                UiKit.Place((RectTransform)beginButton.transform, top, new Vector2(110f, -1086f), new Vector2(380f, 88f));
             }
         }
 
@@ -237,17 +245,17 @@ namespace Edgewise.Game.UI
                 ruleNames[i].fontSizeMax = 26;
                 ruleDescs[i].fontSizeMax = 21;
                 ruleDescs[i].fontSizeMin = 15;
-                UiKit.Place(ruleNames[i].rectTransform, tl, tl, new Vector2(18f, -2f), new Vector2(size.x - 120f, 36f));
-                UiKit.Place(ruleDescs[i].rectTransform, tl, tl, new Vector2(18f, -36f), new Vector2(size.x - 120f, 32f));
+                UiKit.Place(ruleNames[i].rectTransform, tl, tl, new Vector2(18f, -1f), new Vector2(size.x - 120f, 32f));
+                UiKit.Place(ruleDescs[i].rectTransform, tl, tl, new Vector2(18f, -31f), new Vector2(size.x - 120f, 29f));
             }
             else
             {
                 ruleNames[i].fontSizeMax = 22;
                 ruleDescs[i].fontSizeMax = 16;
-                ruleDescs[i].fontSizeMin = 11;
+                ruleDescs[i].fontSizeMin = 10;
                 // 名前の列は一番長い「Sudden Death」が入る幅にし、説明はその右から（重ならない）
-                UiKit.Place(ruleNames[i].rectTransform, left, new Vector2(0f, 0.5f), new Vector2(16f, 0f), new Vector2(196f, size.y));
-                UiKit.Place(ruleDescs[i].rectTransform, left, new Vector2(0f, 0.5f), new Vector2(222f, 0f), new Vector2(size.x - 222f - 90f, size.y));
+                UiKit.Place(ruleNames[i].rectTransform, left, new Vector2(0f, 0.5f), new Vector2(14f, 0f), new Vector2(180f, size.y));
+                UiKit.Place(ruleDescs[i].rectTransform, left, new Vector2(0f, 0.5f), new Vector2(200f, 0f), new Vector2(size.x - 200f - 84f, size.y));
             }
             ruleStates[i].fontSize = twoLines ? 26 : 20;
             UiKit.Place(ruleStates[i].rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-10f, 0f), new Vector2(80f, size.y - 14f));
@@ -283,8 +291,8 @@ namespace Edgewise.Game.UI
                 ruleNames[i].color = enabled ? Theme.Ink : Theme.InkDim * 0.8f;
                 ruleDescs[i].alpha = enabled ? 1f : 0.5f;
             }
-            // Pivot のトークン数は Sudden Death の ON/OFF で変わる（先攻 1・後攻 2 / 1・1）
-            ruleDescs[RuleCount - 1].text = UiText.PivotDesc(_settings.suddenDeath);
+            // Pivot のトークン数は Sudden Death・Resonance の ON/OFF で変わる（先攻 1・後攻 2 / 1・1）
+            ruleDescs[PivotIndex].text = UiText.PivotDesc(_settings.ToRuleSet());
         }
 
         static void Mark(Button b, bool on)

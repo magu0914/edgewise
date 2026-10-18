@@ -36,6 +36,11 @@ Shader "Edgewise/Card"
         _Lift ("Lift", Float) = 0
         _Flash ("Flash", Float) = 0
         _Pivot ("Pivot Turns (0..3)", Float) = 0
+        _TraitOn ("Trait Badge (Phase 6)", Float) = 0
+        _TraitColor ("Trait Color", Color) = (1, 1, 1, 1)
+        _TraitUsed ("Trait Used (Guard spent)", Float) = 0
+        _Resonance ("Resonance Rim (0..1)", Float) = 0
+        _Shield ("Guard Shield Flash (0..1)", Float) = 0
         _MarkDir ("Capture Mark Direction (xy, 0 = none)", Vector) = (0, 0, 0, 0)
         _QuadSize ("Quad Size", Vector) = (1.24, 1.49, 0, 0)
     }
@@ -80,6 +85,11 @@ Shader "Edgewise/Card"
             float _Lift;
             float _Flash;
             float _Pivot;
+            float _TraitOn;
+            float4 _TraitColor;
+            float _TraitUsed;
+            float _Resonance;
+            float _Shield;
             float4 _MarkDir;
             float4 _QuadSize;
             float4 _ArtStars[14];
@@ -412,6 +422,12 @@ Shader "Edgewise/Card"
                 acc = over(acc, S(float3(0.12, 0.13, 0.20)), fill(dt2) * _TribeOn);
                 acc = over(acc, S(float3(0.62, 0.66, 0.80)), saturate(1.0 - abs(dt2) / 0.010) * _TribeOn);
 
+                // Trait のバッジ（右下寄りの丸。漢字 1 字は CardView の文字が重なる）。使い切った Guard はくすませる
+                float dtr = length(p - float2(0.352, -0.262)) - 0.084;
+                float traitDim = lerp(1.0, 0.38, _TraitUsed);
+                acc = over(acc, S(float3(0.035, 0.04, 0.075)), fill(dtr) * 0.92 * _TraitOn);
+                acc = over(acc, _TraitColor.rgb * 1.15 * traitDim, saturate(1.0 - abs(dtr) / 0.011) * _TraitOn);
+
                 // Pivot で回したカードは、回した角度ぶんの金の弧（上から時計回り）と先端の点を出す
                 if (_Pivot > 0.5)
                 {
@@ -523,6 +539,19 @@ Shader "Edgewise/Card"
                 else if (_Unknown > 0.5) acc = unknownFace(p, acc, inside, d);
                 else acc = face(p, acc, inside, d);
 
+                // 共鳴（Resonance）: 同じ系統の自分のカードが隣り合っているカードは、縁が系統の色でゆっくり脈打つ
+                if (_Resonance > 0.001 && _FaceDown < 0.5 && _Unknown < 0.5)
+                {
+                    float3 rtop, rbottom;
+                    tribeColors(rtop, rbottom);
+                    float3 rc = S(lerp(rtop, rbottom, 0.25)) * 1.7;
+                    float rp = 0.65 + 0.35 * sin(_Time.y * 3.2);
+                    float rimLine = saturate(1.0 - abs(d + 0.026) / 0.017) * inside;
+                    acc = over(acc, rc * (0.9 + 0.5 * rp), rimLine * saturate(_Resonance) * 0.95);
+                    float rimGlow = exp(-max(d, 0.0) * 30.0) * outside;
+                    acc = over(acc, rc, rimGlow * saturate(_Resonance) * 0.5 * rp);
+                }
+
                 // 予告: 取れる予定のカードには「取れる」印（金の円の中に、置く位置からの向きの矢印）。所有者の色は変えない
                 if (dot(_MarkDir.xy, _MarkDir.xy) > 0.01)
                 {
@@ -537,6 +566,17 @@ Shader "Edgewise/Card"
                     arrow = min(arrow, sdSegment(lp, float2(0.08, 0.0), float2(0.02, 0.055)));
                     arrow = min(arrow, sdSegment(lp, float2(0.08, 0.0), float2(0.02, -0.055)));
                     acc = over(acc, S(float3(1.0, 0.9, 0.55)) * (1.4 + 0.6 * pulse), fill(arrow - 0.017));
+                }
+                // Guard が防いだ一瞬の盾（青白い盾の形が広がって光る）
+                if (_Shield > 0.001)
+                {
+                    float3 sc = S(float3(0.55, 0.86, 1.0));
+                    float2 sp = (p - float2(0.04, -0.03)) / (0.72 + 0.4 * saturate(_Shield));
+                    float sw = 0.2 * lerp(1.0, sqrt(saturate((sp.y + 0.3) / 0.3)), step(sp.y, 0.0));
+                    float ds = max(abs(sp.x) - sw, max(sp.y - 0.24, -sp.y - 0.3));
+                    acc = over(acc, sc * 1.4, fill(ds) * 0.42 * saturate(_Shield) * inside);
+                    acc = over(acc, sc * 2.2, saturate(1.0 - abs(ds) / 0.02) * saturate(_Shield * 1.3) * inside);
+                    acc = over(acc, sc, inside * saturate(_Shield) * 0.25);
                 }
                 // 着地・裏返しの一瞬の白い光
                 acc = over(acc, float3(1.6, 1.6, 1.6), inside * saturate(_Flash) * 0.6);

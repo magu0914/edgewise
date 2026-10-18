@@ -15,6 +15,8 @@ namespace Edgewise.Sim
     ///     --match A:B        対戦（複数可・カンマ区切り可）。A/B = random | easy | normal | hard、"hard@200000" でノード予算を上書き
     ///     --rules LIST       ルールのプリセット（カンマ区切り）。default = basic,spc,all,openoff。他: spc-openoff, all-openoff, same, plus, pivot, all-nopivot, ...
     ///     --pivot LIST       Pivot トークン数の候補「先攻/後攻」（カンマ区切り。例 2/2,1/2,2/3。game = ゲーム本体の既定値）。Pivot ON のプリセットを候補ごとの行にする
+    ///     --traits SPEC      Trait の割り当てを差し替える（Phase 6 の調整用。"none" / "id=trait,id=trait" / "only:id=trait,..."。SimCards.cs 参照）
+    ///     --trait-baseline   Traits ON の行ごとに、Traits だけ OFF にした同じ行（同じ配牌・同じ seed）も回し、Trait 付き手札・カード別の勝率を比べる
     ///     --deals N          配牌の数（各配牌を席を入れ替えて 2 局。既定 500 → 1000 局）
     ///     --games N          局数で指定（--deals N/2 と同じ）
     ///     --seed S           乱数の seed（配牌・先攻・AI の乱数がすべてこれで決まる）
@@ -37,6 +39,8 @@ namespace Edgewise.Sim
             var matches = new List<(PlayerSpec, PlayerSpec)>();
             string rules = "default";
             string pivot = null;
+            string traitSpec = null;
+            bool traitBaseline = false;
             int deals = 500;
             long seed = 1;
             int threads = Environment.ProcessorCount;
@@ -66,6 +70,8 @@ namespace Edgewise.Sim
                             break;
                         case "--rules": rules = Next(); break;
                         case "--pivot": pivot = Next(); break;
+                        case "--traits": traitSpec = Next(); break;
+                        case "--trait-baseline": traitBaseline = true; break;
                         case "--deals": deals = int.Parse(Next(), CultureInfo.InvariantCulture); break;
                         case "--games": deals = Math.Max(1, int.Parse(Next(), CultureInfo.InvariantCulture) / 2); break;
                         case "--seed": seed = long.Parse(Next(), CultureInfo.InvariantCulture); break;
@@ -86,6 +92,16 @@ namespace Edgewise.Sim
             {
                 Console.Error.WriteLine(e.Message);
                 Console.Error.WriteLine("usage: Edgewise.Sim [--match A:B[,C:D]] [--rules LIST] [--pivot F/S[,F/S]] [--deals N | --games N] [--seed S] [--threads T] [--out PATH] [--bench] [--campaign [--picks K] [--player SPEC] [--only IDS]]");
+                return 2;
+            }
+
+            try
+            {
+                SimCards.Apply(traitSpec);
+            }
+            catch (ArgumentException e)
+            {
+                Console.Error.WriteLine(e.Message);
                 return 2;
             }
 
@@ -139,12 +155,18 @@ namespace Edgewise.Sim
             Console.WriteLine(header.ToString());
 
             var results = new List<MatchResult>();
+            var baselines = new List<(MatchResult On, MatchResult Off)>();
             foreach (var preset in presets)
             {
                 foreach (var (a, b) in matches)
                 {
                     var r = MatchRunner.Run(preset, a, b, deals, seed, threads);
                     results.Add(r);
+                    if (traitBaseline && preset.Rules.Traits)
+                    {
+                        var off = MatchRunner.Run(preset.WithoutTraits(), a, b, deals, seed, threads);
+                        baselines.Add((r, off));
+                    }
                     var s = r.Stats;
                     int decisive = s.WinsA + s.WinsB;
                     var (lo, hi) = Report.Wilson(s.WinsA, decisive);
@@ -157,7 +179,8 @@ namespace Edgewise.Sim
                 }
             }
 
-            var md = Report.Build(results, header.ToString());
+            if (traitSpec != null) header.AppendLine("- Traits override: `" + traitSpec + "`");
+            var md = Report.Build(results, header.ToString(), baselines);
             Console.WriteLine(md);
             if (outPath != null)
             {

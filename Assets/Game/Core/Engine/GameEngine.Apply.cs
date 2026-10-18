@@ -15,7 +15,7 @@ namespace Edgewise.Core
         }
     }
 
-    // 1 手の解決（参照実装）。DESIGN.md §2 の判定順序 1〜5 をそのままコードにしている。
+    // 1 手の解決（参照実装）。DESIGN.md §2 の判定順序 1〜5 と §3-4（Resonance・Trait）をそのままコードにしている。
     // 高速版は GameEngine.Fast.cs。両者の結果一致はテストで保証する。
     public static partial class GameEngine
     {
@@ -27,18 +27,57 @@ namespace Edgewise.Core
             var player = state.Turn;
             int placedCell = move.Cell;
             string cardId = state.HandArray(player)[move.HandIndex];
+            bool resonance = rules.Resonance;
+            bool traits = rules.Traits;
 
             var board = (PlacedCard?[])state.BoardArray.Clone();
-            board[placedCell] = new PlacedCard(LookupCard(state, cardId), player, move.Rotation);
+            var placedDef = LookupCard(state, cardId);
+            board[placedCell] = new PlacedCard(placedDef, player, move.Rotation);
             var events = new List<GameEvent> { new PlaceEvent(player, placedCell, cardId, move.Rotation) };
 
-            int ValueAt(int cell, int dir) => Board.EffectiveSide(state, board[cell].Value, cell, dir);
+            // Rally: この手の間だけ、置いたカードの全辺 +1（縦横に隣接する自分のカード 1 枚につき、最大 +2）。置いた時点の盤面で数える
+            int rally = 0;
+            if (traits && placedDef.Trait == TraitId.Rally)
+            {
+                for (int dir = 0; dir < 4; dir++)
+                {
+                    int n = Board.Neighbor(placedCell, dir);
+                    if (n != GameConstants.Wall && board[n].HasValue && board[n].Value.Owner == player) rally++;
+                }
+                if (rally > 2) rally = 2;
+            }
+
+            // 比較の瞬間の盤面での辺の値 = 素の値 + Elemental + Resonance（共鳴していれば +1）+ Rally（置いたカードだけ）
+            int ValueAt(int cell, int dir)
+            {
+                int v = Board.EffectiveSide(state, board[cell].Value, cell, dir);
+                if (resonance && Board.IsResonant(board, cell)) v++;
+                if (cell == placedCell) v += rally;
+                return v;
+            }
 
             void Flip(int cell, FlipCause cause, int chainDepth, int from)
             {
                 board[cell] = board[cell].Value.WithOwner(player);
                 events.Add(new FlipEvent(cell, player, cause, chainDepth, from));
             }
+
+            // Guard / Anchor が裏返しを防ぐか。Guard は最初の 1 回だけ（使い切りにして trait イベントを出す）、Anchor は Combo のときだけ
+            bool Prevents(int cell, FlipCause cause)
+            {
+                if (!traits) return false;
+                var pc = board[cell].Value;
+                if (pc.Card.Trait == TraitId.Guard && !pc.GuardUsed)
+                {
+                    board[cell] = pc.WithGuardUsed();
+                    events.Add(new TraitEvent(cell, TraitId.Guard));
+                    return true;
+                }
+                return pc.Card.Trait == TraitId.Anchor && cause == FlipCause.Combo;
+            }
+
+            bool GuardUnused(int cell) =>
+                traits && board[cell].Value.Card.Trait == TraitId.Guard && !board[cell].Value.GuardUsed;
 
             // ---- 手順 1: Same / Plus（同時判定・同時適用）----
             // 成立判定は所有者を問わず数え、裏返すのは相手所有のものだけ。
@@ -95,9 +134,10 @@ namespace Edgewise.Core
                     }
                 }
 
-                bool OpponentOwned(int c) => board[c].Value.Owner != player;
-                bool anySameFlip = sameSet.Exists(OpponentOwned);
-                bool anyPlusFlip = plusCells.Exists(OpponentOwned);
+                // Guard が未使用のカードはこの手では裏返らない（成立の数え方は変えない）ので、見出しの「実際に裏返る」には数えない
+                bool WillFlip(int c) => board[c].Value.Owner != player && !GuardUnused(c);
+                bool anySameFlip = sameSet.Exists(WillFlip);
+                bool anyPlusFlip = plusCells.Exists(WillFlip);
 
                 // 演出の見出し。実際に裏返るものがあるときだけ出す。Same → Plus の順
                 if (anySameFlip) events.Add(new RuleEvent(wallMatched ? RuleHeading.SameWall : RuleHeading.Same, sameSet.ToArray()));
@@ -110,9 +150,12 @@ namespace Edgewise.Core
                     if (n == GameConstants.Wall) continue;
                     var other = board[n];
                     if (!other.HasValue || other.Value.Owner == player) continue;
-                    if (sameSet.Contains(n)) Flip(n, FlipCause.Same, 0, placedCell);
-                    else if (plusCells.Contains(n)) Flip(n, FlipCause.Plus, 0, placedCell);
+                    FlipCause cause;
+                    if (sameSet.Contains(n)) cause = FlipCause.Same;
+                    else if (plusCells.Contains(n)) cause = FlipCause.Plus;
                     else continue;
+                    if (Prevents(n, cause)) continue;
+                    Flip(n, cause, 0, placedCell);
                     comboQueue.Add((n, 0));
                 }
             }
@@ -124,11 +167,35 @@ namespace Edgewise.Core
                 if (n == GameConstants.Wall) continue;
                 var other = board[n];
                 if (!other.HasValue || other.Value.Owner == player) continue;
-                if (ValueAt(placedCell, dir) > ValueAt(n, Board.Opposite(dir))) Flip(n, FlipCause.Basic, 0, placedCell);
+                if (ValueAt(placedCell, dir) > ValueAt(n, Board.Opposite(dir)))
+                {
+                    if (!Prevents(n, FlipCause.Basic)) Flip(n, FlipCause.Basic, 0, placedCell);
+                }
+            }
+
+            // ---- 手順 2.5: Pierce（斜め隣。右上 → 右下 → 左下 → 左上）----
+            // 置いたカードの隣り合う 2 辺の和 > 相手の向かい合う 2 辺の和なら裏返す。通常ルールと同じ扱い（Combo の起点にならない）
+            if (traits && placedDef.Trait == TraitId.Pierce)
+            {
+                for (int k = 0; k < 4; k++)
+                {
+                    int n = Board.Diagonal(placedCell, k);
+                    if (n == GameConstants.Wall) continue;
+                    var other = board[n];
+                    if (!other.HasValue || other.Value.Owner == player) continue;
+                    int a = Board.PierceDirA[k];
+                    int b = Board.PierceDirB[k];
+                    int mineSum = ValueAt(placedCell, a) + ValueAt(placedCell, b);
+                    int theirSum = ValueAt(n, Board.Opposite(a)) + ValueAt(n, Board.Opposite(b));
+                    if (mineSum > theirSum)
+                    {
+                        if (!Prevents(n, FlipCause.Basic)) Flip(n, FlipCause.Basic, 0, placedCell);
+                    }
+                }
             }
 
             // ---- 手順 3: Combo（手順 1 で裏返ったカードを起点に幅優先、FIFO）----
-            // 連鎖では Same / Plus を再判定しない。手順 2 の裏返しは起点にならない。
+            // 連鎖では Same / Plus を再判定しない。手順 2・2.5 の裏返しは起点にならない。
             if (rules.Combo)
             {
                 for (int head = 0; head < comboQueue.Count; head++)
@@ -142,6 +209,7 @@ namespace Edgewise.Core
                         if (!other.HasValue || other.Value.Owner == player) continue;
                         if (ValueAt(src, dir) > ValueAt(n, Board.Opposite(dir)))
                         {
+                            if (Prevents(n, FlipCause.Combo)) continue;
                             Flip(n, FlipCause.Combo, depth + 1, src);
                             comboQueue.Add((n, depth + 1));
                         }

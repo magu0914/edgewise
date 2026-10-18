@@ -32,12 +32,20 @@ namespace Edgewise.Core
         Dragon = 3,
     }
 
-    /// <summary>Trait の ID（Phase 4 で確定。現状は型の置き場のみ）。</summary>
+    /// <summary>Trait（固有能力）の ID（DESIGN.md §3-4。Lv7〜10 の一部のカードが 1 つ持つ）。</summary>
     public enum TraitId
     {
+        /// <summary>守護: 盤に置かれた後、最初の 1 回だけ裏返らない（使ったら消える）。</summary>
         Guard = 0,
+
+        /// <summary>貫通: 置いたとき、斜め隣の相手カードとも辺 2 本の和で比べる。</summary>
         Pierce = 1,
-        Echo = 2,
+
+        /// <summary>鼓舞: 置いたとき、縦横に隣接する自分のカード 1 枚につき全辺 +1（最大 +2）。その手の比較の間だけ。</summary>
+        Rally = 2,
+
+        /// <summary>錨: 盤に置かれた後、Combo では裏返らない。</summary>
+        Anchor = 3,
     }
 
     public enum Phase
@@ -91,14 +99,18 @@ namespace Edgewise.Core
         public const int MatchPivotTokensSecond = 2;
 
         /// <summary>
-        /// Sudden Death ON のときの後攻の Pivot トークン数。再戦では先攻が入れ替わりトークンは持ち越すので、
+        /// Sudden Death ON（または Resonance ON）のときの後攻の Pivot トークン数。再戦では先攻が入れ替わりトークンは持ち越すので、
         /// 後攻に 2 個渡すと再戦で「先攻＋トークン多め」になって後攻側に偏る（Hard 同士で本戦の先攻 43.5%）。そのため 1 個にする。
         /// </summary>
         public const int MatchPivotTokensSecondSuddenDeath = 1;
 
-        /// <summary>ゲーム本体で使う Pivot トークン数（先攻, 後攻）。ルールの組み合わせで決まる（docs/BALANCE.md「Phase 3c」）。</summary>
+        /// <summary>
+        /// ゲーム本体で使う Pivot トークン数（先攻, 後攻）。ルールの組み合わせで決まる（docs/BALANCE.md「Phase 3c」「Phase 6」）。
+        /// Sudden Death ON または Resonance ON のときは 1・1。Resonance ON で先攻 1・後攻 2 だと Hard 同士の先攻勝率が
+        /// Same+Plus+Combo+Pivot+Resonance で 28.7%（1・1 なら 44.3%、Traits も ON なら 51.4%）まで偏るため（Phase 6）。
+        /// </summary>
         public static (int First, int Second) MatchPivotTokens(RuleSet rules) =>
-            rules != null && rules.SuddenDeath
+            rules != null && (rules.SuddenDeath || rules.Resonance)
                 ? (MatchPivotTokensFirst, MatchPivotTokensSecondSuddenDeath)
                 : (MatchPivotTokensFirst, MatchPivotTokensSecond);
 
@@ -129,7 +141,7 @@ namespace Edgewise.Core
     {
         static readonly string[] ElementIds = { "fire", "ice", "thunder", "earth", "water", "wind", "holy", "dark" };
         static readonly string[] TribeIds = { "beast", "machine", "spirit", "dragon" };
-        static readonly string[] TraitIds = { "guard", "pierce", "echo" };
+        static readonly string[] TraitIds = { "guard", "pierce", "rally", "anchor" };
         static readonly string[] CauseIds = { "basic", "same", "plus", "combo" };
         static readonly string[] HeadingIds = { "same", "plus", "sameWall" };
         static readonly string[] ResultIds = { "p0", "p1", "draw" };
@@ -142,6 +154,8 @@ namespace Edgewise.Core
         public static string ToId(this RuleHeading r) => HeadingIds[(int)r];
         public static string ToId(this GameResult r) => ResultIds[(int)r];
         public static string ToId(this Phase p) => PhaseIds[(int)p];
+
+        public const int TraitCount = 4;
 
         public static Player Opponent(this Player p) => p == Player.P0 ? Player.P1 : Player.P0;
 
@@ -156,6 +170,20 @@ namespace Edgewise.Core
                 }
             }
             element = default;
+            return false;
+        }
+
+        public static bool TryParseTrait(string id, out TraitId trait)
+        {
+            for (int i = 0; i < TraitIds.Length; i++)
+            {
+                if (TraitIds[i] == id)
+                {
+                    trait = (TraitId)i;
+                    return true;
+                }
+            }
+            trait = default;
             return false;
         }
 

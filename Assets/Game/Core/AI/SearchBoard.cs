@@ -24,6 +24,8 @@ namespace Edgewise.Core.AI
         bool _plus;
         bool _combo;
         bool _pivotRule;
+        bool _resonance;
+        bool _traits;
 
         // ---- カード表 ----
         readonly int[] _side = new int[MaxCards * SideStride];
@@ -32,6 +34,8 @@ namespace Edgewise.Core.AI
         readonly int[] _rotMask = new int[MaxCards];
         readonly int[] _cardClass = new int[MaxCards];
         readonly CardDef[] _defs = new CardDef[MaxCards];
+        readonly int[] _cardTribe = new int[MaxCards]; // 系統（Tribe）の番号。なし、または Resonance OFF なら -1
+        readonly int[] _cardTrait = new int[MaxCards]; // Trait の番号。なし、または Traits OFF なら -1
         int _cardCount;
 
         // ---- 局面 ----
@@ -39,9 +43,16 @@ namespace Edgewise.Core.AI
         readonly int[] _cellCard = new int[GameConstants.BoardSize];
         readonly int[] _cellRot = new int[GameConstants.BoardSize];
         readonly int[] _queue = new int[GameConstants.BoardSize];
+        readonly int[] _tribeCells = new int[GameConstants.TribeCount]; // 系統ごとの、カードが置かれているマスのビットマスク
+        int _rally;     // 置いたカードの Rally ボーナス（ResolveFlips の間だけ有効）
+        int _rallyCell; // 置いたカードのマス
 
         public int Occupied;
         public int OwnerP1;
+
+        /// <summary>Guard を使い切ったカードのマスのビットマスク（Traits ON のときだけ増える）。Zobrist にも入る。</summary>
+        public int GuardUsedMask;
+
         public readonly int[] HandCard = new int[2 * MaxSlots];
         public readonly int[] HandMask = new int[2];
         public readonly int[] Pivot = new int[2];
@@ -71,7 +82,11 @@ namespace Edgewise.Core.AI
             _plus = rules.Plus && !blind;
             _combo = rules.Combo && !blind;
             _pivotRule = rules.Pivot;
+            _resonance = rules.Resonance;
+            _traits = rules.Traits;
             _cardCount = 0;
+            GuardUsedMask = 0;
+            for (int t = 0; t < _tribeCells.Length; t++) _tribeCells[t] = 0;
 
             var elements = state.CellElementArray;
             bool elemental = rules.Elemental;
@@ -96,6 +111,12 @@ namespace Edgewise.Core.AI
                 if (pc.Owner == Player.P1) OwnerP1 |= 1 << cell;
                 Hash ^= Zobrist.Place(cell, card, rot);
                 if (pc.Owner == Player.P1) Hash ^= Zobrist.Owner(cell);
+                if (_cardTribe[card] >= 0) _tribeCells[_cardTribe[card]] |= 1 << cell;
+                if (_traits && pc.GuardUsed)
+                {
+                    GuardUsedMask |= 1 << cell;
+                    Hash ^= Zobrist.GuardUsed(cell);
+                }
             }
 
             LoadHand(0, hand0, elements, elemental);
@@ -133,6 +154,8 @@ namespace Edgewise.Core.AI
             if (_cardCount >= MaxCards) throw new InvalidOperationException("too many cards for search");
             int card = _cardCount++;
             _defs[card] = def;
+            _cardTribe[card] = _resonance && def.Tribe.HasValue ? (int)def.Tribe.Value : -1;
+            _cardTrait[card] = _traits && def.Trait.HasValue ? (int)def.Trait.Value : -1;
             var s = def.Sides;
             _rawSum[card] = s.Sum;
 
@@ -141,7 +164,7 @@ namespace Edgewise.Core.AI
             for (int other = 0; other < card; other++)
             {
                 var o = _defs[other];
-                if (o.Sides == s && o.Element == def.Element)
+                if (o.Sides == s && o.Element == def.Element && _cardTribe[other] == _cardTribe[card] && _cardTrait[other] == _cardTrait[card])
                 {
                     _cardClass[card] = _cardClass[other];
                     break;
@@ -263,6 +286,7 @@ namespace Edgewise.Core.AI
             _cellRot[cell] = rot;
 
             int bit = 1 << cell;
+            if (_cardTribe[card] >= 0) _tribeCells[_cardTribe[card]] |= bit;
             Occupied |= bit;
             ulong h = Hash ^ Zobrist.Place(cell, card, rot) ^ Zobrist.Hand(p, slot) ^ Zobrist.TurnKey;
             if (p == 1)
@@ -278,7 +302,7 @@ namespace Edgewise.Core.AI
                 h ^= Zobrist.PivotKey(p, Pivot[p]);
             }
 
-            int flipped = ResolveFlips(cell, p);
+            int flipped = ResolveFlips(cell, p, out int guarded);
             if (flipped != 0)
             {
                 OwnerP1 ^= flipped;
@@ -287,13 +311,24 @@ namespace Edgewise.Core.AI
                     if ((flipped & (1 << c)) != 0) h ^= Zobrist.Owner(c);
                 }
             }
+            if (guarded != 0)
+            {
+                // ResolveFlips が GuardUsedMask を更新済み。Zobrist だけここで反映する
+                for (int c = 0; c < GameConstants.BoardSize; c++)
+                {
+                    if ((guarded & (1 << c)) != 0) h ^= Zobrist.GuardUsed(c);
+                }
+            }
             Hash = h;
             Turn = p ^ 1;
-            return flipped;
+            return flipped | (guarded << 9);
         }
 
-        public void Unmake(int code, int flipped)
+        /// <summary>Make の戻り値（下位 9 ビット = 裏返ったマス、その上の 9 ビット = この手で Guard を使い切ったマス）を渡して戻す。</summary>
+        public void Unmake(int code, int made)
         {
+            int flipped = made & 511;
+            int guarded = made >> 9;
             int slot = code / 36;
             int cell = (code >> 2) % 9;
             int rot = code & 3;
@@ -301,6 +336,14 @@ namespace Edgewise.Core.AI
             int card = HandCard[p * MaxSlots + slot];
 
             ulong h = Hash ^ Zobrist.TurnKey;
+            if (guarded != 0)
+            {
+                GuardUsedMask &= ~guarded;
+                for (int c = 0; c < GameConstants.BoardSize; c++)
+                {
+                    if ((guarded & (1 << c)) != 0) h ^= Zobrist.GuardUsed(c);
+                }
+            }
             if (flipped != 0)
             {
                 OwnerP1 ^= flipped;
@@ -323,6 +366,7 @@ namespace Edgewise.Core.AI
                 h ^= Zobrist.Owner(cell);
             }
             Occupied &= ~bit;
+            if (_cardTribe[card] >= 0) _tribeCells[_cardTribe[card]] &= ~bit;
             _cellCard[cell] = -1;
             h ^= Zobrist.Place(cell, card, rot) ^ Zobrist.Hand(p, slot);
             Hash = h;
@@ -330,10 +374,52 @@ namespace Edgewise.Core.AI
         }
 
         /// <summary>
-        /// 置いたカード（cell、所有者 p）による裏返しを計算し、裏返るマスのマスクを返す（OwnerP1 はまだ変更しない）。
-        /// 手順は ApplyMoveFast と同じ: Same/Plus → 通常ルール → Combo（Same/Plus で裏返ったカードを起点に FIFO）。
+        /// 比較の瞬間の辺の値。素の値（Elemental 込み）+ Resonance（共鳴していれば +1）+ Rally（置いたカードだけ）。
+        /// opp は「いま相手（手番でない側）が所有しているマス」のマスクで、共鳴の判定（同じ所有者か）に使う。
         /// </summary>
-        int ResolveFlips(int cell, int p)
+        int SideNow(int cell, int dir, int opp)
+        {
+            int v = _val[cell * 4 + dir];
+            if (_resonance && Resonant(cell, opp)) v++;
+            if (cell == _rallyCell) v += _rally;
+            return v;
+        }
+
+        /// <summary>cell のカードが共鳴しているか（同じ所有者・同じ系統のカードが縦横に隣接）。ownerMask はどちらか一方の側の所有マスク。</summary>
+        bool Resonant(int cell, int ownerMask)
+        {
+            int t = _cardTribe[_cellCard[cell]];
+            if (t < 0) return false;
+            int group = (ownerMask & (1 << cell)) != 0 ? ownerMask : Occupied & ~ownerMask;
+            return (NeighborMask[cell] & _tribeCells[t] & group) != 0;
+        }
+
+        /// <summary>
+        /// Guard / Anchor が裏返しを防ぐか。Guard は最初の 1 回だけ（GuardUsedMask に入れ、guarded に記録）、Anchor は Combo のときだけ。
+        /// </summary>
+        bool Prevents(int n, bool isCombo, ref int guarded)
+        {
+            int trait = _cardTrait[_cellCard[n]];
+            if (trait == (int)TraitId.Guard)
+            {
+                int bit = 1 << n;
+                if ((GuardUsedMask & bit) == 0)
+                {
+                    GuardUsedMask |= bit;
+                    guarded |= bit;
+                    return true;
+                }
+                return false;
+            }
+            return isCombo && trait == (int)TraitId.Anchor;
+        }
+
+        /// <summary>
+        /// 置いたカード（cell、所有者 p）による裏返しを計算し、裏返るマスのマスクを返す（OwnerP1 はまだ変更しない）。
+        /// 手順は ApplyMoveFast と同じ: Same/Plus → 通常ルール → Pierce → Combo（Same/Plus で裏返ったカードを起点に FIFO）。
+        /// Guard を使い切ったマスは guarded に返し、GuardUsedMask はここで更新する。
+        /// </summary>
+        int ResolveFlips(int cell, int p, out int guarded)
         {
             // owner(c) == p  ⇔  ((OwnerP1 >> c) & 1) == p。ここでは「p 以外の所有」を opp マスクで持つ
             int occ = Occupied & ~(1 << cell);
@@ -341,6 +427,19 @@ namespace Edgewise.Core.AI
             int flipped = 0;
             int cb = cell * 4;
             int queueLength = 0;
+            guarded = 0;
+
+            // Rally: 置いた時点の盤面で、縦横に隣接する自分のカード 1 枚につき +1（最大 +2）
+            _rallyCell = cell;
+            _rally = 0;
+            bool traits = _traits;
+            int placedTrait = traits ? _cardTrait[_cellCard[cell]] : -1;
+            if (placedTrait == (int)TraitId.Rally)
+            {
+                int mineAdj = NeighborMask[cell] & occ & ~opp;
+                int count = PopCount(mineAdj);
+                _rally = count > 2 ? 2 : count;
+            }
 
             if (_same || _plus)
             {
@@ -350,14 +449,14 @@ namespace Edgewise.Core.AI
                 for (int dir = 0; dir < 4; dir++)
                 {
                     int n = Neighbors[cb + dir];
-                    int v = _val[cb + dir];
+                    int v = SideNow(cell, dir, opp);
                     if (n < 0)
                     {
                         if (_sameWall && v == GameConstants.WallRank) sameCount++;
                         continue;
                     }
                     if ((occ & (1 << n)) == 0) continue;
-                    int t = _val[n * 4 + ((dir + 2) & 3)];
+                    int t = SideNow(n, (dir + 2) & 3, opp);
                     if (_same && v == t)
                     {
                         sameCount++;
@@ -392,6 +491,7 @@ namespace Edgewise.Core.AI
                         int nb = 1 << n;
                         if ((opp & nb) != 0)
                         {
+                            if (traits && Prevents(n, false, ref guarded)) continue;
                             opp &= ~nb;
                             flipped |= nb;
                             _queue[queueLength++] = n;
@@ -407,10 +507,33 @@ namespace Edgewise.Core.AI
                 if (n < 0) continue;
                 int nb = 1 << n;
                 if ((opp & nb) == 0) continue;
-                if (_val[cb + dir] > _val[n * 4 + ((dir + 2) & 3)])
+                if (SideNow(cell, dir, opp) > SideNow(n, (dir + 2) & 3, opp))
                 {
+                    if (traits && Prevents(n, false, ref guarded)) continue;
                     opp &= ~nb;
                     flipped |= nb;
+                }
+            }
+
+            // Pierce（斜め 4 方向。右上 → 右下 → 左下 → 左上）。Combo の起点にならない
+            if (placedTrait == (int)TraitId.Pierce)
+            {
+                for (int k = 0; k < 4; k++)
+                {
+                    int n = Board.Diagonal(cell, k);
+                    if (n < 0) continue;
+                    int nb = 1 << n;
+                    if ((opp & nb) == 0) continue;
+                    int a = Board.PierceDirA[k];
+                    int b = Board.PierceDirB[k];
+                    int mineSum = SideNow(cell, a, opp) + SideNow(cell, b, opp);
+                    int theirSum = SideNow(n, (a + 2) & 3, opp) + SideNow(n, (b + 2) & 3, opp);
+                    if (mineSum > theirSum)
+                    {
+                        if (Prevents(n, false, ref guarded)) continue;
+                        opp &= ~nb;
+                        flipped |= nb;
+                    }
                 }
             }
 
@@ -427,8 +550,9 @@ namespace Edgewise.Core.AI
                         if (n < 0) continue;
                         int nb = 1 << n;
                         if ((opp & nb) == 0) continue;
-                        if (_val[sb + dir] > _val[n * 4 + ((dir + 2) & 3)])
+                        if (SideNow(src, dir, opp) > SideNow(n, (dir + 2) & 3, opp))
                         {
+                            if (traits && Prevents(n, true, ref guarded)) continue;
                             opp &= ~nb;
                             flipped |= nb;
                             _queue[queueLength++] = n;
@@ -484,6 +608,7 @@ namespace Edgewise.Core.AI
             int occ = Occupied;
             int empty = ~occ & 511;
             int risk0 = 0, risk1 = 0;
+            int guard0 = 0, guard1 = 0;
             int turn = Turn;
             for (int c = 0; c < GameConstants.BoardSize; c++)
             {
@@ -494,11 +619,12 @@ namespace Edgewise.Core.AI
                 bool attackerRotates = _pivotRule && Pivot[attacker] > 0;
                 int cb = c * 4;
                 int worst = 0;
+                int resBonus = _resonance && Resonant(c, OwnerP1) ? 1 : 0;
                 for (int d = 0; d < 4; d++)
                 {
                     int n = Neighbors[cb + d];
                     if (n < 0 || (empty & (1 << n)) == 0) continue;
-                    int sv = _val[cb + d];
+                    int sv = _val[cb + d] + resBonus;
                     int r = sv <= 0 ? w.RiskTable[0] : sv >= RiskTableSize ? 0 : w.RiskTable[sv];
                     if (attackHand != 0)
                     {
@@ -519,8 +645,15 @@ namespace Edgewise.Core.AI
                 }
                 if (owner == 1) risk1 += worst;
                 else risk0 += worst;
+
+                // 未使用の Guard は 1 回ぶんの守りなので少し加点（持ち主側に）
+                if (_traits && _cardTrait[_cellCard[c]] == (int)TraitId.Guard && (GuardUsedMask & (1 << c)) == 0)
+                {
+                    if (owner == 1) guard1 += w.GuardBonus;
+                    else guard0 += w.GuardBonus;
+                }
             }
-            v += risk1 - risk0;
+            v += risk1 - risk0 + guard0 - guard1;
 
             // 手札の強さ（辺の合計）: 強いカードを後に残している方が有利
             int sum0 = 0, sum1 = 0;
@@ -544,6 +677,21 @@ namespace Edgewise.Core.AI
         // ------------------------------------------------------------------
 
         static readonly int[] Neighbors = BuildNeighbors();
+
+        /// <summary>マスごとの、縦横の隣のマスのビットマスク。</summary>
+        static readonly int[] NeighborMask = BuildNeighborMasks();
+
+        static int[] BuildNeighborMasks()
+        {
+            var t = new int[GameConstants.BoardSize];
+            for (int c = 0; c < GameConstants.BoardSize; c++)
+                for (int d = 0; d < 4; d++)
+                {
+                    int n = Board.Neighbor(c, d);
+                    if (n >= 0) t[c] |= 1 << n;
+                }
+            return t;
+        }
 
         static int[] BuildNeighbors()
         {
@@ -575,6 +723,7 @@ namespace Edgewise.Core.AI
                 if ((Occupied & (1 << c)) == 0) continue;
                 h ^= Zobrist.Place(c, _cellCard[c], _cellRot[c]);
                 if ((OwnerP1 & (1 << c)) != 0) h ^= Zobrist.Owner(c);
+                if ((GuardUsedMask & (1 << c)) != 0) h ^= Zobrist.GuardUsed(c);
             }
             for (int p = 0; p < 2; p++)
             {
@@ -605,7 +754,8 @@ namespace Edgewise.Core.AI
             pivotToken: 15,
             threat: 40,
             threatToMove: 60,
-            riskTable: new[] { 20, 20, 18, 16, 14, 11, 8, 5, 3, 1, 0, 0 });
+            riskTable: new[] { 20, 20, 18, 16, 14, 11, 8, 5, 3, 1, 0, 0 },
+            guardBonus: 30);
 
         /// <summary>手番側のボーナス（次の 1 手で何かを取れる見込み）。</summary>
         public int Tempo { get; }
@@ -622,9 +772,12 @@ namespace Edgewise.Core.AI
         /// <summary>Pivot トークン 1 個の価値（使い切りを避ける）。</summary>
         public int PivotToken { get; }
 
+        /// <summary>盤上の未使用の Guard 1 枚の価値（Traits ON のときだけ評価に入る。1 回ぶんの守りなので小さく）。</summary>
+        public int GuardBonus { get; }
+
         internal readonly int[] RiskTable;
 
-        public EvalWeights(int tempo, int handSidePoint, int pivotToken, int threat, int threatToMove, int[] riskTable)
+        public EvalWeights(int tempo, int handSidePoint, int pivotToken, int threat, int threatToMove, int[] riskTable, int guardBonus = 30)
         {
             if (riskTable == null || riskTable.Length != SearchBoard.RiskTableSize) throw new ArgumentException("riskTable must have 12 entries");
             Tempo = tempo;
@@ -632,6 +785,7 @@ namespace Edgewise.Core.AI
             PivotToken = pivotToken;
             Threat = threat;
             ThreatToMove = threatToMove;
+            GuardBonus = guardBonus;
             RiskTable = (int[])riskTable.Clone();
         }
 
@@ -645,7 +799,7 @@ namespace Edgewise.Core.AI
                 for (int i = 0; i < table.Length; i++) table[i] = table[i] * riskPercent.Value / 100;
             }
             return new EvalWeights(tempo ?? Tempo, handSidePoint ?? HandSidePoint, pivotToken ?? PivotToken, threat ?? Threat,
-                threatToMove ?? ThreatToMove, table);
+                threatToMove ?? ThreatToMove, table, GuardBonus);
         }
 
         public override string ToString() =>

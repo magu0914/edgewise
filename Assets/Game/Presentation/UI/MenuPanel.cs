@@ -47,6 +47,10 @@ namespace Edgewise.Game.UI
             rulesPanel = UiKit.Panel(root, "RulesPanel", a, new Color(0.05f, 0.06f, 0.13f, 0.97f));
             rulesText = UiKit.Label(rulesPanel.transform, "Text", a, "", 20, Theme.Ink, TextAlignmentOptions.TopLeft);
             UiKit.Stretch(rulesText.rectTransform, 24, 20, 24, 20);
+            // 全ルール ON（共鳴・Trait の説明つき）でも収まるように、長いときは文字を縮める
+            rulesText.enableAutoSizing = true;
+            rulesText.fontSizeMin = 12;
+            rulesText.fontSizeMax = 20;
             rulesPanel.gameObject.SetActive(false);
             ApplyLayout(false);
         }
@@ -117,14 +121,14 @@ namespace Edgewise.Game.UI
         {
             var sb = new StringBuilder();
             sb.Append("<color=#F5D17A>").Append(UiText.RulesInUse).Append("</color>\n");
-            sb.Append("<size=17>").Append(UiText.BasicRule).Append("</size>\n\n");
+            sb.Append("<size=85%>").Append(UiText.BasicRule).Append("</size>\n\n");
             if (r == null) return sb.ToString();
             bool any = false;
             void Line(bool on, string name, string desc)
             {
                 if (!on) return;
                 any = true;
-                sb.Append("<b>").Append(name).Append("</b>  <size=17>").Append(desc).Append("</size>\n");
+                sb.Append("<b>").Append(name).Append("</b>  <size=85%>").Append(desc).Append("</size>\n");
             }
             Line(r.Open, UiText.RuleOpen, UiText.RuleOpenDesc);
             Line(r.Random, UiText.RuleRandom, UiText.RuleRandomDesc);
@@ -134,8 +138,18 @@ namespace Edgewise.Game.UI
             Line(r.Combo, UiText.RuleCombo, UiText.RuleComboDesc);
             Line(r.Elemental, UiText.RuleElemental, UiText.RuleElementalDesc);
             Line(r.SuddenDeath, UiText.RuleSuddenDeath, UiText.RuleSuddenDeathDesc);
-            Line(r.Pivot, UiText.RulePivot, UiText.PivotDesc(r.SuddenDeath));
+            Line(r.Pivot, UiText.RulePivot, UiText.PivotDesc(r));
+            Line(r.Resonance, UiText.RuleResonance, UiText.RuleResonanceDesc);
+            Line(r.Traits, UiText.RuleTraits, UiText.RuleTraitsDesc);
             if (!any) sb.Append(UiText.NoRules);
+            if (r.Resonance) sb.Append("\n<size=80%><color=#F5D17A>").Append(UiText.ResonanceHeading).Append("</color>  ").Append(UiText.ResonanceNote).Append("</size>\n");
+            if (r.Traits)
+            {
+                // 4 つの固有能力（右下の漢字のバッジ）
+                sb.Append("\n<color=#F5D17A>").Append(UiText.TraitHeading).Append("</color>\n");
+                foreach (TraitId t in System.Enum.GetValues(typeof(TraitId)))
+                    sb.Append("<b>").Append(Theme.TraitGlyph(t)).Append(' ').Append(UiText.TraitName(t)).Append("</b>  <size=80%>").Append(UiText.TraitDesc(t)).Append("</size>\n");
+            }
             return sb.ToString();
         }
     }

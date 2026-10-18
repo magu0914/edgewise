@@ -15,6 +15,8 @@ namespace Edgewise.Game.Match
         void OnFlip(int cell, Player to, int indexInMove, int chainDepth);
         void OnRule(RuleHeading rule);
         void OnCombo(int depth);
+        /// <summary>Guard が裏返しを防いだ（盾が光る）。</summary>
+        void OnGuard(int cell);
         void OnEnd(GameResult resultForSeat0);
     }
 
@@ -27,6 +29,7 @@ namespace Edgewise.Game.Match
         public void OnFlip(int cell, Player to, int indexInMove, int chainDepth) { }
         public void OnRule(RuleHeading rule) { }
         public void OnCombo(int depth) { }
+        public void OnGuard(int cell) { }
         public void OnEnd(GameResult resultForSeat0) { }
     }
 }

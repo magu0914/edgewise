@@ -23,10 +23,10 @@ namespace Edgewise.Core
         public bool SuddenDeath { get; }
         public bool Pivot { get; }
 
-        /// <summary>未実装（true だと CreateGame が NotImplementedRuleException）。</summary>
+        /// <summary>Resonance（共鳴。DESIGN.md §3-4）。同じ所有者・同じ系統のカードが縦横に隣接していると全辺 +1。</summary>
         public bool Resonance { get; }
 
-        /// <summary>未実装（true だと CreateGame が NotImplementedRuleException）。</summary>
+        /// <summary>Traits（固有能力。DESIGN.md §3-4）。CardDef.Trait を持つカードの能力が働く。</summary>
         public bool Traits { get; }
 
         public RuleSet(

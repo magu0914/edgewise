@@ -27,6 +27,9 @@ namespace Edgewise.Core
                 var c = state.Cards[ids[i]];
                 sb.Append(ids[i]).Append('=').Append(c.Sides.ToString()).Append('.');
                 if (c.Element.HasValue) sb.Append(c.Element.Value.ToId());
+                // Resonance / Traits が ON のときだけ系統・Trait も同期チェックの対象にする（OFF の文字列は TS 版のまま）
+                if (state.Rules.Resonance && c.Tribe.HasValue) sb.Append('#').Append(c.Tribe.Value.ToId());
+                if (state.Rules.Traits && c.Trait.HasValue) sb.Append('@').Append(c.Trait.Value.ToId());
             }
             sb.Append(';');
 
@@ -41,6 +44,7 @@ namespace Edgewise.Core
                 }
                 var pc = board[i].Value;
                 sb.Append(pc.CardId).Append(':').Append(((int)pc.Owner).ToString(inv)).Append(pc.Rotation.ToString(inv));
+                if (pc.GuardUsed) sb.Append('g'); // Guard を使い切った（Traits ON のときだけ起こる）
             }
             sb.Append(';');
 

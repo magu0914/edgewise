@@ -115,27 +115,37 @@ namespace Edgewise.Core
         /// </summary>
         public readonly Player PlacedBy;
 
+        /// <summary>
+        /// Guard（守護）を使い切ったか。Traits ルールが ON のときだけ意味を持つ（OFF では常に false）。
+        /// 局面の同一性（Equals・hashState・Zobrist）に含める（Traits ON のときだけ値が変わるので、OFF のハッシュは従来のまま）。
+        /// </summary>
+        public readonly bool GuardUsed;
+
         /// <summary>placedBy を省略すると owner（置いた直後の状態）とみなす。</summary>
-        public PlacedCard(CardDef card, Player owner, int rotation, Player? placedBy = null)
+        public PlacedCard(CardDef card, Player owner, int rotation, Player? placedBy = null, bool guardUsed = false)
         {
             Card = card ?? throw new ArgumentNullException(nameof(card));
             Owner = owner;
             Rotation = rotation;
             PlacedBy = placedBy ?? owner;
+            GuardUsed = guardUsed;
         }
 
         public string CardId => Card.Id;
 
-        public PlacedCard WithOwner(Player owner) => new PlacedCard(Card, owner, Rotation, PlacedBy);
+        public PlacedCard WithOwner(Player owner) => new PlacedCard(Card, owner, Rotation, PlacedBy, GuardUsed);
+
+        /// <summary>Guard を使い切った状態にしたコピー。</summary>
+        public PlacedCard WithGuardUsed() => new PlacedCard(Card, Owner, Rotation, PlacedBy, true);
 
         public bool Equals(PlacedCard other) =>
-            Owner == other.Owner && Rotation == other.Rotation && Card.Id == other.Card.Id;
+            Owner == other.Owner && Rotation == other.Rotation && Card.Id == other.Card.Id && GuardUsed == other.GuardUsed;
 
         public override bool Equals(object obj) => obj is PlacedCard other && Equals(other);
 
         public override int GetHashCode() => (Card.Id.GetHashCode() * 4 + Rotation) * 2 + (int)Owner;
 
-        public override string ToString() => CardId + ":" + (int)Owner + Rotation;
+        public override string ToString() => CardId + ":" + (int)Owner + Rotation + (GuardUsed ? "g" : "");
     }
 
     /// <summary>1 手。handIndex 番目の手札を cell に rotation で置く。</summary>

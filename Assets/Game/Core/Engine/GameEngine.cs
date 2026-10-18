@@ -30,8 +30,6 @@ namespace Edgewise.Core
         public static GameState CreateGame(GameConfig config)
         {
             var rules = config.Rules;
-            if (rules.Resonance) throw new NotImplementedRuleException("resonance");
-            if (rules.Traits) throw new NotImplementedRuleException("traits");
 
             var allCards = config.Cards;
             uint rng = Rng.SeedToState(config.Seed);

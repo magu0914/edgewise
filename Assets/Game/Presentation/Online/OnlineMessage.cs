@@ -71,7 +71,7 @@ namespace Edgewise.Game.Online
             return GameEngine.CreateGame(new GameConfig(rules, d0, d1, seed, CardCatalog.ById, tokens.First, tokens.Second));
         }
 
-        /// <summary>11 桁の 0/1 文字列（RuleSet.ToBitString）から戻す。形が違う・未実装のルールが入っていれば null。</summary>
+        /// <summary>11 桁の 0/1 文字列（RuleSet.ToBitString）から戻す。形が違えば null。resonance / traits（Phase 6）も受け付ける。</summary>
         public static RuleSet ParseRules(string bits)
         {
             if (bits == null || bits.Length != 11) return null;
@@ -80,9 +80,8 @@ namespace Edgewise.Game.Online
                 if (c != '0' && c != '1') return null;
             }
             bool B(int i) => bits[i] == '1';
-            if (B(9) || B(10)) return null; // resonance / traits は未実装
             return new RuleSet(open: B(0), random: B(1), same: B(2), sameWall: B(3), plus: B(4), combo: B(5), elemental: B(6),
-                suddenDeath: B(7), pivot: B(8));
+                suddenDeath: B(7), pivot: B(8), resonance: B(9), traits: B(10));
         }
     }
 }

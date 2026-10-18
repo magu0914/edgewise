@@ -17,6 +17,8 @@ namespace Edgewise.Game.Match
         ComboBanner,
         /// <summary>同じ段・同じ原因の裏返し（0.05 秒ずつずらして同時に回す）。</summary>
         FlipGroup,
+        /// <summary>Guard が裏返しを防いだ（そのマスのカードに盾が光る）。</summary>
+        Trait,
         /// <summary>手番の交代。</summary>
         Turn,
         /// <summary>Sudden Death の再戦。</summary>
@@ -60,6 +62,7 @@ namespace Edgewise.Game.Match
         public int[] Cells = new int[0];
         public FlipStep[] Flips = new FlipStep[0];
         public int ComboDepth;
+        public TraitId Trait;
         public int Round;
         public (int P0, int P1) Score;
         public GameResult Result;
@@ -88,6 +91,9 @@ namespace Edgewise.Game.Match
                     }
                     sb.Append(']');
                     break;
+                case StepKind.Trait:
+                    sb.Append(' ').Append(Trait.ToId()).Append(" cell ").Append(Cell);
+                    break;
                 case StepKind.Turn:
                     sb.Append(" p").Append((int)Player);
                     break;
@@ -105,6 +111,7 @@ namespace Edgewise.Game.Match
     /// <summary>
     /// エンジンのイベント列を演出ステップの列に変換する（純関数。ルールの判断はしない）。
     /// 順序: Place → (RuleLink → RuleBanner)* → 裏返し（Same/Plus → 通常）→ 段ごとに (ComboBanner → 裏返し) → Turn / SuddenDeath / End。
+    /// Guard が防いだときの Trait は、イベントの並びのとおりにその位置へ入る。
     /// </summary>
     public static class PlaybackPlanner
     {
@@ -162,6 +169,12 @@ namespace Edgewise.Game.Match
                         break;
                     }
 
+                    case TraitEvent tr:
+                        // Guard が防いだ。裏返しの群れの途中でも、盾を見せてから続きを再生する
+                        Flush();
+                        steps.Add(new PlaybackStep { Kind = StepKind.Trait, Cell = tr.Cell, Trait = tr.Trait });
+                        break;
+
                     case TurnEvent t:
                         Flush();
                         groupClass = -1;
@@ -181,7 +194,7 @@ namespace Edgewise.Game.Match
                         break;
 
                     default:
-                        // resonance / trait は Phase 4。ここでは演出しない
+                        // resonance イベントは使わない（共鳴の縁は盤の見た目から決める。BoardView.RefreshResonance）
                         break;
                 }
             }

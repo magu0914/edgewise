@@ -609,3 +609,112 @@ dotnet test dotnet/Edgewise.sln --filter "FullyQualifiedName~PersonalityTests" -
 | テオ | `hard/nodes=120000/worlds=6/noise=30` | forgecolossus auroraveil voltwyrm nocturnis orionmane cassiveil pegasion | 3 |
 | ローレル | `hard` | stormgear taurocrag gravelith scorpidrake polarion astrolabion ursamaw ophiwyrm | 3 |
 | イオ | `hard` | （今と同じ） | 3 |
+
+
+## Phase 6: Resonance（共鳴）と Trait（固有能力）
+
+DESIGN.md §3-4 の確定仕様（Resonance・Trait 4 種）を 3 つの実装（`ApplyMove`・`ApplyMoveFast`・`SearchBoard`）に入れ、Hard 同士の自己対戦でバランスを測った。
+測定条件は本書の冒頭と同じ（Hard 同士・Open ON・`--seed 2026`・1000 配牌 × 席交代 = 2000 局 / 行）。Pivot ON の行は `--pivot game`（ゲーム本体のトークン数。下の「決めたこと 2」）。
+生の出力: `Logs/p6-final3.md`（リポジトリ外のログ）。
+
+### 結論
+
+1. **先攻勝率（配牌ごとに 1 局だけ数えた独立な標本。引き分けを除く）は、13 行中 12 行が目標の 45〜55% に入った**。外れたのは Same+Plus+Combo+Pivot+Resonance の 44.0% [38.7, 49.4] だけ（区間は 45 をまたぐ。Traits も ON なら 50.7%）。
+2. **Resonance は Pivot の先攻・後攻の非対称（先攻 1・後攻 2）と相性が悪く**、ON のときだけトークンを 1・1 にした（決めたこと 2）。
+3. **Trait は 12 枚に割り当て済み**（Pierce 1・Guard 4・Rally 4・Anchor 3）。Trait 付きカードの勝率は、同じ Lv7〜10 の Trait なしカードと同程度（差 −4〜+6 ポイント）。Pierce は強すぎるので 1 枚に絞った。
+4. 手札単位の差（Trait 付きのカードを含む手札の勝率の、Traits ON − OFF）は +8.9〜+13.3 ポイント（1 行だけ +17.9）。目安の 15 ポイント以内に概ね収まった。
+
+### 先攻勝率と引き分け率（Hard 同士）
+
+| ルール（すべて Open） | トークン 先攻/後攻 | 先攻勝率（独立標本）[95% 区間] | 引き分け率 |
+|---|---|---:|---:|
+| Resonance | – | 50.2% [45.8, 54.6] | 50.6% |
+| Traits | – | 54.1% [49.7, 58.5] | 50.5% |
+| Resonance + Traits | – | 49.7% [45.5, 54.0] | 46.9% |
+| Pivot + Resonance | 1/1 | 47.8% [43.3, 52.4] | 53.6% |
+| Pivot + Traits | 1/2 | 45.4% [41.1, 49.7] | 49.3% |
+| Pivot + Resonance + Traits | 1/1 | 48.3% [44.0, 52.6] | 48.0% |
+| Same+Plus+Combo + Resonance + Traits | – | 49.6% [45.2, 54.0] | 51.4% |
+| **Same+Plus+Combo+Pivot + Resonance**（ゲームの既定のルール +） | 1/1 | **44.0% [38.7, 49.4]** | 66.8% |
+| Same+Plus+Combo+Pivot + Traits | 1/2 | 49.5% [44.9, 54.0] | 54.3% |
+| Same+Plus+Combo+Pivot + Resonance + Traits | 1/1 | 50.7% [45.9, 55.5] | 58.0% |
+| 全部入り（Sudden Death・Random・Elemental 込み）+ Resonance | 1/1 | 51.8% [48.6, 55.0] | 7.4% |
+| 全部入り + Traits | 1/1 | 52.4% [49.2, 55.6] | 7.7% |
+| 全部入り + Resonance + Traits | 1/1 | 50.1% [46.9, 53.3] | 6.5% |
+
+比較（BALANCE 冒頭・Phase 3c）: Pivot だけ 49.3% [44.8, 53.7]、Same+Plus+Combo+Pivot 47.6% [42.8, 52.4]（どちらも `--pivot game`、本フェーズで再測定）。
+引き分け率が高い（Sudden Death なしで 50% 前後）のは Phase 2 から続く既知の傾向（Hard 同士はほぼ完全に読み切る）で、Resonance・Traits で悪化はしていない。
+
+### Trait 付きのカードを含む手札の勝率
+
+ちょうど片方の手札だけが Trait 付きのカードを含む配牌（772〜816 局）で、含む側の勝率。Trait 付きのカードはすべて Lv7〜10 なので、Traits OFF でも含む手札は強い（71〜84%）。
+DESIGN の目安「含まない手札との差 15 ポイント以内」は、素の差（OFF でも 20〜35 ポイント）ではなく **Traits を ON にしたことによる増分（ON − OFF）** で判断した。
+
+| ルール | ON | OFF（同じ配牌） | ON − OFF |
+|---|---:|---:|---:|
+| Traits | 89.2% | 78.6% | +10.6 |
+| Resonance + Traits | 89.7% | 77.4% | +12.4 |
+| Pivot + Traits | 88.6% | 76.9% | +11.8 |
+| Pivot + Resonance + Traits | 90.5% | 80.1% | +10.3 |
+| Same+Plus+Combo + Resonance + Traits | 91.4% | 79.0% | +12.5 |
+| Same+Plus+Combo+Pivot + Traits | 89.4% | 71.5% | **+17.9** |
+| Same+Plus+Combo+Pivot + Resonance + Traits | 93.1% | 84.1% | +8.9 |
+| 全部入り + Traits | 72.4% | 59.1% | +13.3 |
+| 全部入り + Resonance + Traits | 73.5% | 64.4% | +9.1 |
+
+もう 1 つの見方（カード単位。持ち主の勝率）: Trait 付きの 12 枚と、同じ Lv7〜10 で Trait のない 8 枚を比べる。
+
+| ルール | Trait 付き 12 枚（ON） | Trait なし 8 枚（ON） | 差 |
+|---|---:|---:|---:|
+| Resonance + Traits | 71.6% | 73.7% | −2.1 |
+| Same+Plus+Combo + Resonance + Traits | 73.0% | 73.3% | −0.3 |
+| Same+Plus+Combo+Pivot + Resonance + Traits | 74.9% | 69.1% | +5.8 |
+| 全部入り + Resonance + Traits | 60.9% | 61.0% | −0.1 |
+
+### Trait の割り当てと理由
+
+12 枚（Lv7〜10 の 20 枚のうち）。判断の材料は、同じルールで Traits を ON にしたときの持ち主の勝率の増え方（`--trait-baseline`。1 枚あたり約 400 局、標準誤差 約 2.5 ポイント）。
+
+| Trait | カード | 理由 |
+|---|---|---|
+| Pierce（貫） | Leomane（Lv7） | **最強の Trait**。斜めの 4 枚を辺 2 本の和で比べるので、取れる枚数が増える。弱い Lv7 に付けても 75〜90% まで勝率が上がる（2 枚に付けた試行では 2 枚とも 82〜86%）。そこで 1 枚に絞り、Lv7〜10 で最も勝率の低いカード（Traits OFF で 45〜52%）に付けて「弱いカードの逆転札」にした |
+| Guard（守） | Auroraveil・Draconyx（Lv7）、Gravelith（Lv8）、Cassiveil（Lv9） | 勝率は +11〜+27 ポイント上がる（弱い Lv7 ほど大きい。Cassiveil は元が 85% なのでほぼ変わらない）。辺が偏ったカード（Auroraveil の上 3、Draconyx の左 2、Cassiveil の上 3）の穴を 1 回だけ守る意味づけ |
+| Rally（鼓） | Forgecolossus・Stormgear（Lv7）、Nocturnis（Lv8）、Astrolabion（Lv9） | 効果は小さい（−5〜+5）。置く場所を選ぶ必要があるので、中位のカードに付けた。Astrolabion は辺が均等（7・8・8・7）で +2 が効きやすい |
+| Anchor（錨） | Cygnwraith・Taurocrag・Voltwyrm（Lv8） | Combo が ON のときだけ意味がある（効果はほぼ 0〜−5）。辺の強い Lv8 に付けて、Combo のあるルールで「連鎖で取られにくい壁」にした |
+
+最初の割り当て（Pierce ×3・Guard ×3・Rally ×3・Anchor ×3 を、高い方のカードから順に配った案）では、Pierce の 3 枚が +23〜+32 ポイント、手札単位の差が +10〜+15 ポイントで、Pierce が支配的だった。それを上の形に直した。
+
+### 決めたこと
+
+1. **Guard の評価（AI）**: 盤上の未使用の Guard 1 枚を持ち主に +30（1/100 枚単位。カード 1 枚の 100 未満）。Guard が防いだ後は消える（`GuardUsedMask` を Zobrist にも入れる）。
+2. **Resonance ON のとき Pivot のトークンは先攻 1・後攻 2 ではなく 1・1**（`GameConstants.MatchPivotTokens`）。理由: Hard 同士の先攻勝率が、Resonance + Pivot（1/2）で偏りすぎる。
+
+   | ルール | 1/2 | 1/1 | 2/1 | 2/2 |
+   |---|---:|---:|---:|---:|
+   | Same+Plus+Combo+Pivot+Resonance | 28.7% | 44.3% | 83.0% | 78.4% |
+   | Same+Plus+Combo+Pivot+Resonance+Traits | 39.9% | 51.4% | 81.9% | 71.4% |
+
+   （2/1・2/2 は 700 配牌。1/1 の行は 1000 配牌で再測定して 44.0% と 50.7%。Resonance なしの Pivot は従来どおり 1/2。Traits だけなら 1/2 で 49.5%。）
+   Resonance は同じ系統を隣に置いた側の辺が +1 になるので、手番の数（先攻 5 枚・後攻 4 枚）とトークンの差が増幅されるためと考えられる（未検証）。
+3. **Pierce で取ったカードの cause は Basic**（`FlipEvent` の cause は増やさない）。Guard が Pierce を防ぐときも Guard を消費する（「通常ルールの延長」として扱う）。
+4. **Rally の数え方**: 置いた時点（裏返しの前）の縦横の自分のカード数。Resonance は逆に、比較のたびにそのときの盤面で判定する。
+5. **Anchor が Combo を防いでも trait イベントは出さない**（仕様どおり Guard だけ）。
+
+### 速度
+
+dotnet の `--bench`: Hard 4.43 M ノード/秒（Phase 2 の 4.86 M から約 −9%。比較ごとに共鳴の判定が入るため）。ApplyMoveFast は 0.24〜0.31 µs。WebGL のビルドサイズは +30 KB（17,943,850 → 17,974,065 バイト）。
+
+### 再現コマンド
+
+```
+# 本表（約 25 分）
+dotnet run -c Release --project dotnet/Edgewise.Sim -- --match hard:hard --rules phase6 --pivot game --deals 1000 --seed 2026 --trait-baseline --out Logs/p6-final3.md
+
+# Pivot のトークン数の比較（決めたこと 2）
+dotnet run -c Release --project dotnet/Edgewise.Sim -- --match hard:hard --rules spc-pivot-res,spc-pivot-res-traits --pivot 1/2,1/1,2/1,2/2 --deals 700 --seed 2026
+
+# Trait の割り当てを差し替えて試す（--traits "only:id=trait,..." は指定したカード以外の Trait を外す）
+dotnet run -c Release --project dotnet/Edgewise.Sim -- --match hard:hard --rules traits,res-traits --pivot game --deals 1000 --seed 2026 --trait-baseline --traits "only:leomane=pierce,auroraveil=guard"
+```
+
+プリセット（`--rules`）: `res` `traits` `res-traits` `pivot-res` `pivot-traits` `pivot-res-traits` `spc-res` `spc-traits` `spc-res-traits` `spc-pivot-res` `spc-pivot-traits` `spc-pivot-res-traits` `all-res` `all-traits` `all-res-traits`（Open OFF: `res-traits-openoff` `all-res-traits-openoff`）、まとめて `phase6`。

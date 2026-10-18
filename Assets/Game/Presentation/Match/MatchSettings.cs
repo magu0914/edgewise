@@ -48,6 +48,10 @@ namespace Edgewise.Game.Match
         public bool suddenDeath;
         public bool pivot = true;
 
+        /// <summary>Resonance（共鳴）と Traits（固有能力）。Phase 6 の選択ルールで、初期設定は OFF（星図巡りでは使わない）。</summary>
+        public bool resonance;
+        public bool traits;
+
         /// <summary>席ごとの操作者。</summary>
         public SeatKind seat0 = SeatKind.Human;
         public SeatKind seat1 = SeatKind.Cpu;
@@ -69,7 +73,7 @@ namespace Edgewise.Game.Match
         public MatchSettings Clone() => (MatchSettings)MemberwiseClone();
 
         public RuleSet ToRuleSet() => new RuleSet(open: open, random: random, same: same, sameWall: same && sameWall, plus: plus,
-            combo: combo, elemental: elemental, suddenDeath: suddenDeath, pivot: pivot);
+            combo: combo, elemental: elemental, suddenDeath: suddenDeath, pivot: pivot, resonance: resonance, traits: traits);
 
         public SeatKind Seat(Player p) => p == Player.P0 ? seat0 : seat1;
 

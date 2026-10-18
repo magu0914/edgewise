@@ -20,6 +20,13 @@ namespace Edgewise.Tests.EditMode
             Assert.That(UiText.RulePivotDescSuddenDeath, Does.Contain(sd.First + " 回ずつ"));
             Assert.That(UiText.PivotDesc(true), Is.EqualTo(UiText.RulePivotDescSuddenDeath));
             Assert.That(MenuPanel.DescribeRules(new RuleSet(pivot: true, suddenDeath: true)), Does.Contain(UiText.RulePivotDescSuddenDeath));
+
+            // Phase 6: Resonance ON でも 1 回ずつ（docs/BALANCE.md「Phase 6」）
+            var res = GameConstants.MatchPivotTokens(new RuleSet(pivot: true, resonance: true));
+            Assert.That(res.First, Is.EqualTo(res.Second));
+            Assert.That(UiText.PivotDesc(new RuleSet(pivot: true, resonance: true)), Is.EqualTo(UiText.RulePivotDescSuddenDeath));
+            Assert.That(UiText.PivotDesc(new RuleSet(pivot: true, traits: true)), Is.EqualTo(UiText.RulePivotDesc), "Traits alone keeps 1 and 2");
+            Assert.That(MenuPanel.DescribeRules(new RuleSet(pivot: true, resonance: true)), Does.Contain(UiText.RulePivotDescSuddenDeath));
         }
     }
 }

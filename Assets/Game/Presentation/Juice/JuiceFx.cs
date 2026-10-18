@@ -93,6 +93,14 @@ namespace Edgewise.Game.Juice
             _shake.Add(juice.comboShakePerDepth * depth);
         }
 
+        public void OnGuard(int cell)
+        {
+            if (!Animated) return;
+            // 盾の音は、揺れを伴う Same の音を小さく流用する（新しい効果音は足さない）
+            Play(SfxKind.Same, 4f);
+            _shake.Add(juice.placeShake);
+        }
+
         public void OnEnd(GameResult resultForSeat0) =>
             Play(resultForSeat0 == GameResult.P0 ? SfxKind.Win : resultForSeat0 == GameResult.P1 ? SfxKind.Lose : SfxKind.Draw);
     }

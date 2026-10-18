@@ -86,6 +86,46 @@ namespace Edgewise.Game.View
             }
         }
 
+        /// <summary>Trait のバッジの漢字 1 字（右下）。</summary>
+        public static string TraitGlyph(TraitId t)
+        {
+            switch (t)
+            {
+                case TraitId.Guard: return "守";
+                case TraitId.Pierce: return "貫";
+                case TraitId.Rally: return "鼓";
+                case TraitId.Anchor: return "錨";
+                default: return "";
+            }
+        }
+
+        /// <summary>Trait のバッジの色（円の縁と地）。</summary>
+        public static Color TraitColor(TraitId t)
+        {
+            switch (t)
+            {
+                case TraitId.Guard: return new Color(0.45f, 0.82f, 1f);
+                case TraitId.Pierce: return new Color(1f, 0.45f, 0.40f);
+                case TraitId.Rally: return new Color(1f, 0.82f, 0.38f);
+                case TraitId.Anchor: return new Color(0.55f, 0.92f, 0.62f);
+                default: return Color.white;
+            }
+        }
+
+        /// <summary>共鳴の縁の色（系統ごと。シェーダーのシルエットの色と同じ系統の色味）。</summary>
+        public static Color TribeColor(Tribe? t)
+        {
+            if (!t.HasValue) return new Color(0.92f, 0.93f, 0.98f);
+            switch (t.Value)
+            {
+                case Tribe.Beast: return new Color(1f, 0.74f, 0.36f);
+                case Tribe.Machine: return new Color(0.58f, 0.78f, 1f);
+                case Tribe.Spirit: return new Color(0.78f, 0.62f, 1f);
+                case Tribe.Dragon: return new Color(0.42f, 1f, 0.76f);
+                default: return Color.white;
+            }
+        }
+
         /// <summary>ランクの表記（10 = A）。補正後は 0 や 11 もありうる。</summary>
         public static string Rank(int v) => v == 10 ? "A" : v.ToString();
     }

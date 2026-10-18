@@ -15,6 +15,9 @@ namespace Edgewise.Tests.EditMode
         static readonly RuleSet AllRules = new RuleSet(open: false, random: true, same: true, sameWall: true, plus: true, combo: true,
             elemental: true, suddenDeath: true, pivot: true);
 
+        static readonly RuleSet AllRulesWithTraits = new RuleSet(open: false, random: true, same: true, sameWall: true, plus: true, combo: true,
+            elemental: true, suddenDeath: true, pivot: true, resonance: true, traits: true);
+
         /// <summary>ホストとゲストの 2 つのセッション（同じ LoopbackNetwork）。時計はテストが進める。</summary>
         sealed class Pair
         {
@@ -105,7 +108,54 @@ namespace Edgewise.Tests.EditMode
             Assert.That(OnlineSetup.ParseRules(AllRules.ToBitString()), Is.EqualTo(AllRules));
             Assert.That(OnlineSetup.ParseRules("1010"), Is.Null);
             Assert.That(OnlineSetup.ParseRules("0000000000x"), Is.Null);
-            Assert.That(OnlineSetup.ParseRules("00000000001"), Is.Null, "resonance is not implemented");
+            // Phase 6: resonance / traits はそのままビット列で運ばれる（プロトコルの追加は要らない）
+            Assert.That(OnlineSetup.ParseRules("00000000010"), Is.EqualTo(new RuleSet(resonance: true)));
+            Assert.That(OnlineSetup.ParseRules("00000000001"), Is.EqualTo(new RuleSet(traits: true)));
+            Assert.That(OnlineSetup.ParseRules(AllRulesWithTraits.ToBitString()), Is.EqualTo(AllRulesWithTraits));
+        }
+
+        [Test]
+        public void AFullGameWithResonanceAndTraitsKeepsBothHashesEqual()
+        {
+            // 共鳴と Trait（Guard の使用済みもハッシュに入る）が入っても、両端末の局面が毎手一致する
+            for (int seed = 1; seed <= 12; seed++)
+            {
+                var p = new Pair(1000 + seed);
+                p.Start(AllRulesWithTraits, CardBand.Advanced);
+                Assert.That(p.Guest.Rules, Is.EqualTo(AllRulesWithTraits));
+                int moves = 0;
+                int guards = 0;
+                while (p.Host.Phase == SessionPhase.Playing)
+                {
+                    var (sent, received) = p.PlayOne(moves + seed);
+                    foreach (var e in sent.Result.Events)
+                    {
+                        if (e is TraitEvent) guards++;
+                    }
+                    Assert.That(GameEngine.HashState(p.Host.State), Is.EqualTo(GameEngine.HashState(p.Guest.State)), "seed " + seed + " after move " + moves);
+                    Assert.That(received.Result.Events.Count, Is.EqualTo(sent.Result.Events.Count));
+                    moves++;
+                }
+                Assert.That(p.Host.Ending, Is.EqualTo(EndReason.Completed));
+                Assert.That(p.Host.RejectedCount + p.Guest.RejectedCount, Is.EqualTo(0));
+            }
+        }
+
+        [Test]
+        public void TheMirrorKeepsAUsedGuard()
+        {
+            var cards = new System.Collections.Generic.Dictionary<string, CardDef>
+            {
+                ["g"] = new CardDef("g", "G", 1, new Sides(1, 1, 1, 1), null, Tribe.Beast, TraitId.Guard),
+            };
+            var board = new PlacedCard?[9];
+            board[1] = new PlacedCard(cards["g"], Player.P1, 0, null, true);
+            var s = GameState.FromParts(new RuleSet(traits: true), cards, board, new Element?[9], new[] { "g" }, new[] { "g" }, Player.P0, Player.P0, 0, 0, 1u,
+                Phase.Playing, 0);
+            var m = StateMirror.Mirror(s);
+            Assert.That(m.Board[1].Value.GuardUsed, Is.True);
+            Assert.That(m.Board[1].Value.Owner, Is.EqualTo(Player.P0));
+            Assert.That(StateMirror.Mirror(m), Is.EqualTo(s));
         }
 
         [Test]

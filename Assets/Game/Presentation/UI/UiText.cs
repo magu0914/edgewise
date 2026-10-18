@@ -1,3 +1,5 @@
+using Edgewise.Core;
+
 namespace Edgewise.Game.UI
 {
     /// <summary>
@@ -44,13 +46,63 @@ namespace Edgewise.Game.UI
         public const string RuleElementalDesc = "属性マスで一致 +1、不一致 −1";
         public const string RuleSuddenDeath = "Sudden Death";
         public const string RuleSuddenDeathDesc = "引き分けなら持ちカードで再戦（5 回まで）";
+        public const string RuleResonance = "Resonance";
+        public const string RuleResonanceDesc = "同じ系統の自分のカードが隣り合うと、全辺 +1";
+        public const string RuleTraits = "Traits";
+        public const string RuleTraitsDesc = "Lv7〜10 の一部のカードが固有能力を持つ";
         public const string RulePivot = "Pivot";
-        // トークン数は GameConstants.MatchPivotTokens（先攻 1・後攻 2、Sudden Death ON は 1・1）。変えたらここも直す（テストで照合）
+        // トークン数は GameConstants.MatchPivotTokens（先攻 1・後攻 2、Sudden Death か Resonance が ON なら 1・1）。変えたらここも直す（テストで照合）
         public const string RulePivotDesc = "カードを 90° 回して置ける（先攻 1 回・後攻 2 回）";
-        public const string RulePivotDescSuddenDeath = "カードを 90° 回して置ける（Sudden Death ON は 1 回ずつ）";
+        public const string RulePivotDescSuddenDeath = "カードを 90° 回して置ける（Sudden Death・Resonance は 1 回ずつ）";
 
-        /// <summary>Pivot の説明（Sudden Death の ON/OFF でトークン数が変わる）。</summary>
-        public static string PivotDesc(bool suddenDeath) => suddenDeath ? RulePivotDescSuddenDeath : RulePivotDesc;
+        /// <summary>Pivot の説明（Sudden Death か Resonance が ON だとトークン数が 1・1 に変わる）。</summary>
+        public static string PivotDesc(bool symmetric) => symmetric ? RulePivotDescSuddenDeath : RulePivotDesc;
+
+        /// <summary>Pivot の説明（トークン数はゲーム本体の GameConstants.MatchPivotTokens と同じ規則で決まる）。</summary>
+        public static string PivotDesc(RuleSet rules)
+        {
+            var t = GameConstants.MatchPivotTokens(rules);
+            return PivotDesc(t.First == t.Second);
+        }
+
+        // ---- Resonance と Trait（Phase 6。DESIGN §3-4）----
+        public const string ResonanceHeading = "共鳴";
+        public const string ResonanceNote = "縁が光っているカードは共鳴中（同じ系統の自分のカードが縦横に隣り合っている）。全辺 +1。比べる瞬間の盤で決まります。";
+        public const string TraitHeading = "固有能力";
+        public const string TraitGuardName = "守護";
+        public const string TraitGuardDesc = "盤に置かれた後、最初の 1 回だけ裏返らない";
+        public const string TraitPierceName = "貫通";
+        public const string TraitPierceDesc = "置いたとき、斜め隣の相手カードとも辺 2 本の和で比べて裏返す";
+        public const string TraitRallyName = "鼓舞";
+        public const string TraitRallyDesc = "置いたとき、隣り合う自分のカード 1 枚につき全辺 +1（最大 +2）";
+        public const string TraitAnchorName = "錨";
+        public const string TraitAnchorDesc = "Combo では裏返らない";
+        public const string TraitGuardUsed = "（使用済み）";
+        public const string BannerGuard = "GUARD!";
+        public const string DexTrait = "固有能力";
+        public const string DexTraitNote = "Traits ルールの対戦で働きます";
+
+        public static string TraitName(TraitId t)
+        {
+            switch (t)
+            {
+                case TraitId.Guard: return TraitGuardName;
+                case TraitId.Pierce: return TraitPierceName;
+                case TraitId.Rally: return TraitRallyName;
+                default: return TraitAnchorName;
+            }
+        }
+
+        public static string TraitDesc(TraitId t)
+        {
+            switch (t)
+            {
+                case TraitId.Guard: return TraitGuardDesc;
+                case TraitId.Pierce: return TraitPierceDesc;
+                case TraitId.Rally: return TraitRallyDesc;
+                default: return TraitAnchorDesc;
+            }
+        }
 
         public const string You = "あなた";
         public const string Cpu = "CPU";
@@ -299,7 +351,7 @@ namespace Edgewise.Game.UI
         public const string HowTo4Title = "Pivot（本作オリジナル）";
         public const string HowTo4Body = "置く前にカードを 90° ずつ回して、強い辺を相手に向けられます。回せる回数には限りがあります。";
         public const string HowToRotateLabel = "90°";
-        public const string HowToRulesNote = "Same・Plus・Combo などの追加ルールは、対戦中の「メニュー」→「ルール確認」で確かめられます。";
+        public const string HowToRulesNote = "Same・Plus・Combo・Resonance（共鳴）・Traits（固有能力）などの追加ルールは、対戦設定で選び、対戦中の「メニュー」→「ルール確認」で確かめられます。";
         public const string HowToControls = "操作: ドラッグ＆ドロップ、またはカード → マスの順にタップ。キーボードは矢印で選んで Enter、回転は Q / E。";
 
         // ---- オンライン対戦（Phase 7。DESIGN §9-1） ----
@@ -369,6 +421,6 @@ namespace Edgewise.Game.UI
 
         /// <summary>フォントに必ず入れる追加の記号。</summary>
         public const string ExtraGlyphs = "◆●◇○×★☆・…「」（）〜ー－−＋！？：　0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-            + "火氷雷土水風聖闇獣機霊竜—▶◀▼";
+            + "火氷雷土水風聖闇獣機霊竜—▶◀▼守貫鼓錨共鳴";
     }
 }

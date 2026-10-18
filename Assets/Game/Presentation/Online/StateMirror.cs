@@ -21,7 +21,7 @@ namespace Edgewise.Game.Online
             for (int i = 0; i < board.Length; i++)
             {
                 var c = s.Board[i];
-                board[i] = c.HasValue ? new PlacedCard(c.Value.Card, Swap(c.Value.Owner), c.Value.Rotation, Swap(c.Value.PlacedBy)) : (PlacedCard?)null;
+                board[i] = c.HasValue ? new PlacedCard(c.Value.Card, Swap(c.Value.Owner), c.Value.Rotation, Swap(c.Value.PlacedBy), c.Value.GuardUsed) : (PlacedCard?)null;
                 elems[i] = s.CellElements[i];
             }
             return GameState.FromParts(s.Rules, s.Cards, board, elems, ToList(s.GetHand(Player.P1)), ToList(s.GetHand(Player.P0)),

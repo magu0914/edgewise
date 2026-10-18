@@ -31,6 +31,9 @@ namespace Edgewise.Core.Tests
         public Dictionary<int, Element> CellElements { get; set; } = new Dictionary<int, Element>();
         public int[] PivotTokens { get; set; }
         public int SuddenDeathRound { get; set; }
+
+        /// <summary>Guard を使い切った状態にして置くマス（Traits のテスト用）。</summary>
+        public HashSet<int> GuardUsedCells { get; set; } = new HashSet<int>();
     }
 
     /// <summary>
@@ -61,8 +64,9 @@ namespace Edgewise.Core.Tests
         public const int P1 = 1;
 
         /// <summary>テスト用のカード定義（TS 版 mkCard）。</summary>
-        public static CardDef MkCard(string id, int top, int right, int bottom, int left, Element? element = null) =>
-            new CardDef(id, id, 1, new Sides(top, right, bottom, left), element);
+        public static CardDef MkCard(string id, int top, int right, int bottom, int left, Element? element = null, Tribe? tribe = null,
+            TraitId? trait = null) =>
+            new CardDef(id, id, 1, new Sides(top, right, bottom, left), element, tribe, trait);
 
         /// <summary>任意の局面を直接組み立てる（TS 版 makeState）。rngState は 12345 固定。</summary>
         public static GameState MakeState(Setup s)
@@ -72,7 +76,8 @@ namespace Edgewise.Core.Tests
             foreach (var c in s.Cards) cards[c.Id] = c;
 
             var board = new PlacedCard?[GameConstants.BoardSize];
-            foreach (var (cell, id, owner, rotation) in s.Board) board[cell] = new PlacedCard(cards[id], (Player)owner, rotation);
+            foreach (var (cell, id, owner, rotation) in s.Board)
+                board[cell] = new PlacedCard(cards[id], (Player)owner, rotation, null, s.GuardUsedCells.Contains(cell));
 
             var elements = new Element?[GameConstants.BoardSize];
             foreach (var kv in s.CellElements) elements[kv.Key] = kv.Value;
@@ -91,7 +96,7 @@ namespace Edgewise.Core.Tests
 
         /// <summary>実装済みのルールだけをランダムに ON/OFF（TS 版 randomRules。乱数は 9 回必ず消費し、その後で上書き）。</summary>
         public static RuleSet RandomRules(TestRandom r, bool? suddenDeath = null, bool? same = null, bool? sameWall = null,
-            bool? plus = null, bool? combo = null, bool? elemental = null, bool? pivot = null)
+            bool? plus = null, bool? combo = null, bool? elemental = null, bool? pivot = null, bool resonance = false, bool traits = false)
         {
             bool open = r.Coin(), random = r.Coin(), sm = r.Coin(), sw = r.Coin(), pl = r.Coin(), co = r.Coin(), el = r.Coin(),
                 sd = r.Coin(), pv = r.Coin();
@@ -104,7 +109,9 @@ namespace Edgewise.Core.Tests
                 combo: combo ?? co,
                 elemental: elemental ?? el,
                 suddenDeath: suddenDeath ?? sd,
-                pivot: pivot ?? pv);
+                pivot: pivot ?? pv,
+                resonance: resonance,
+                traits: traits);
         }
 
         /// <summary>本物のカードデータからランダムなデッキを作る（Random ON なら 5〜10 枚）。TS 版 randomConfig。</summary>
@@ -125,8 +132,8 @@ namespace Edgewise.Core.Tests
         }
 
         public static GameState NewRandomGame(TestRandom r, bool? suddenDeath = null, bool? same = null, bool? sameWall = null,
-            bool? plus = null, bool? combo = null, bool? elemental = null, bool? pivot = null) =>
-            GameEngine.CreateGame(RandomConfig(r, RandomRules(r, suddenDeath, same, sameWall, plus, combo, elemental, pivot)));
+            bool? plus = null, bool? combo = null, bool? elemental = null, bool? pivot = null, bool resonance = false, bool traits = false) =>
+            GameEngine.CreateGame(RandomConfig(r, RandomRules(r, suddenDeath, same, sameWall, plus, combo, elemental, pivot, resonance, traits)));
 
         /// <summary>合法手からランダムに選んで終局まで進める（TS 版 playRandom）。</summary>
         public static (GameState State, int Moves) PlayRandom(GameState start, TestRandom r, Func<GameState, Move, GameState> apply)

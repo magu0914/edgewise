@@ -94,6 +94,10 @@ namespace Edgewise.Game.Match
                             break;
                         case StepKind.FlipGroup:
                             await FlipGroupAsync(step, ct);
+                            _board.RefreshResonance(before.Rules.Resonance);
+                            break;
+                        case StepKind.Trait:
+                            await GuardAsync(step, ct);
                             break;
                         case StepKind.SuddenDeath:
                             await _banner.Show(UiText.BannerSuddenDeath, new Color(1f, 0.5f, 0.45f), _juice.infoBannerTime * Tf, ct,
@@ -173,6 +177,8 @@ namespace Edgewise.Game.Match
 
             _board.Placed[step.Cell] = card;
             card.SetOrder(10 + step.Cell);
+            card.SetTraitsEnabled(before.Rules.Traits);
+            _board.RefreshResonance(before.Rules.Resonance);
             var cellElem = before.CellElements[step.Cell];
             card.SetModifier(Board.ElementalModifier(before.Rules, cellElem, def));
             Fx.OnPlace(step.Cell);
@@ -191,6 +197,28 @@ namespace Edgewise.Game.Match
             }, ct, Ease.OutBack, 0f, card, "scale");
             card.transform.localScale = Vector3.one;
         }
+
+        /// <summary>Guard が裏返しを防いだ: そのカードに盾が光り、バッジはくすむ（使い切り）。</summary>
+        async Awaitable GuardAsync(PlaybackStep step, CancellationToken ct)
+        {
+            var card = _board.Placed[step.Cell];
+            if (card == null) return;
+            float tf = Tf;
+            Fx.OnGuard(step.Cell);
+            if (tf <= 0f)
+            {
+                card.SetTraitUsed(true);
+                return;
+            }
+            _banner.Play(UiText.BannerGuard, Theme.TraitColor(TraitId.Guard), GuardBannerTime * tf, null, 0.8f, AboveCell(step.Cell));
+            await Tweens.Run(GuardShieldTime * tf, k => card.SetShield(Mathf.Sin(Mathf.PI * Mathf.Clamp01(k))), ct, Ease.Linear, 0f, card, "shield");
+            card.SetShield(0f);
+            card.SetTraitUsed(true);
+        }
+
+        /// <summary>Guard の盾が光る長さ（秒。速度 ×1 のとき）。</summary>
+        public const float GuardShieldTime = 0.55f;
+        public const float GuardBannerTime = 0.6f;
 
         async Awaitable LinkAsync(int placedCell, PlaybackStep step, List<MeshRenderer> links, CancellationToken ct)
         {

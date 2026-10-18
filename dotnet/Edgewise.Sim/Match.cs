@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
+using System.Linq;
 using System.Threading.Tasks;
 using Edgewise.Core;
 using Edgewise.Core.AI;
@@ -87,6 +88,7 @@ namespace Edgewise.Sim
     sealed class Stats
     {
         public const int Plies = 9;
+        public const int CardSlots = 64;
 
         public int Games, WinsA, WinsB, Draws, FirstWins, SecondWins;
 
@@ -99,6 +101,17 @@ namespace Edgewise.Sim
         /// <summary>Sudden Death の再戦まで行った局の、本戦の先攻の勝ち・負け（再戦では先攻が入れ替わり、Pivot トークンは持ち越す）。</summary>
         public int FirstWinsRematch, SecondWinsRematch;
         public readonly long[] FlipsByCause = new long[4];
+
+        /// <summary>
+        /// Trait 付きのカードを含む初期手札の成績（Phase 6）。ちょうど片方だけが Trait 付きのカードを含む局について、含む側の勝ち・負け・引き分け。
+        /// Trait のルールが OFF でも数える（カードに Trait があるかどうかで判定するので、ON と OFF を同じ配牌で比べられる）。
+        /// </summary>
+        public long TraitHandWins, TraitHandLosses, TraitHandDraws;
+
+        /// <summary>カードごと（CardCatalog の定義順）の、初期手札に持っていた局数・持ち主の勝ち・負け・引き分け。</summary>
+        public readonly long[] CardGames = new long[CardSlots];
+        public readonly long[] CardWins = new long[CardSlots];
+        public readonly long[] CardLosses = new long[CardSlots];
         public int MaxChain;
         public long SumMaxChain;
         public long SuddenDeathRounds;
@@ -139,6 +152,15 @@ namespace Edgewise.Sim
             FirstWinsRematch += o.FirstWinsRematch;
             SecondWinsRematch += o.SecondWinsRematch;
             for (int i = 0; i < 4; i++) FlipsByCause[i] += o.FlipsByCause[i];
+            TraitHandWins += o.TraitHandWins;
+            TraitHandLosses += o.TraitHandLosses;
+            TraitHandDraws += o.TraitHandDraws;
+            for (int i = 0; i < CardGames.Length; i++)
+            {
+                CardGames[i] += o.CardGames[i];
+                CardWins[i] += o.CardWins[i];
+                CardLosses[i] += o.CardLosses[i];
+            }
             MaxChain = Math.Max(MaxChain, o.MaxChain);
             SumMaxChain += o.SumMaxChain;
             SuddenDeathRounds += o.SuddenDeathRounds;
@@ -205,11 +227,36 @@ namespace Edgewise.Sim
             return Rng.NextUInt32(s, out _);
         }
 
+        /// <summary>初期手札ごとの成績（カード別・Trait 付きカードを含む手札 対 含まない手札）。</summary>
+        static void RecordHands(Stats stats, string[][] startHands, GameResult res)
+        {
+            bool[] hasTrait = new bool[2];
+            for (int p = 0; p < 2; p++)
+            {
+                foreach (var id in startHands[p])
+                {
+                    int idx = SimCards.IndexOf(id);
+                    stats.CardGames[idx]++;
+                    if (res == GameResult.Draw) { }
+                    else if ((int)res == p) stats.CardWins[idx]++;
+                    else stats.CardLosses[idx]++;
+                    if (SimCards.ById[id].Trait.HasValue) hasTrait[p] = true;
+                }
+            }
+            if (hasTrait[0] != hasTrait[1])
+            {
+                int traitSide = hasTrait[0] ? 0 : 1;
+                if (res == GameResult.Draw) stats.TraitHandDraws++;
+                else if ((int)res == traitSide) stats.TraitHandWins++;
+                else stats.TraitHandLosses++;
+            }
+        }
+
         static Stats PlayDeal(RulePreset preset, PlayerSpec a, PlayerSpec b, long dealSeed, SearchWorkspace ws)
         {
             var rules = preset.Rules;
             // 配牌: 50 枚から重複なしで両者のデッキを作る（Random ON なら 8 枚ずつ、OFF なら 5 枚ずつ）
-            var all = CardCatalog.All;
+            var all = SimCards.All;
             int deckSize = rules.Random ? 8 : GameConstants.HandSize;
             var ids = new string[all.Count];
             for (int i = 0; i < ids.Length; i++) ids[i] = all[i].Id;
@@ -230,9 +277,10 @@ namespace Edgewise.Sim
             var stats = new Stats();
             for (int aSeat = 0; aSeat < 2; aSeat++)
             {
-                var state = GameEngine.CreateGame(new GameConfig(rules, deck0, deck1, gameSeed, CardCatalog.ById,
+                var state = GameEngine.CreateGame(new GameConfig(rules, deck0, deck1, gameSeed, SimCards.ById,
                     preset.PivotFirst, preset.PivotSecond));
                 var first = state.FirstPlayer;
+                var startHands = new[] { state.GetHand(Player.P0).ToArray(), state.GetHand(Player.P1).ToArray() };
                 var rotatedByRole = new int[2];
                 uint moveRng = Rng.SeedToState(gameSeed ^ (aSeat * 0x7777L));
                 int ply = 0;
@@ -260,14 +308,14 @@ namespace Edgewise.Sim
                         long moveSeed = Rng.NextUInt32(moveRng, out moveRng);
                         var view = spec.Oracle && !state.Rules.Open
                             ? state.WithRules(new RuleSet(true, state.Rules.Random, state.Rules.Same, state.Rules.SameWall, state.Rules.Plus,
-                                state.Rules.Combo, state.Rules.Elemental, state.Rules.SuddenDeath, state.Rules.Pivot))
+                                state.Rules.Combo, state.Rules.Elemental, state.Rules.SuddenDeath, state.Rules.Pivot, state.Rules.Resonance, state.Rules.Traits))
                             : state;
                         IReadOnlyList<CardDef> pool = all;
                         if (spec.Label.Contains("/truepool=1"))
                         {
                             // 計測専用: 見えていないカードの候補を相手の本当の手札だけにする（決定化の仕組みが正しいかの確認）
                             var tp = new List<CardDef>();
-                            foreach (var id in state.GetHand(state.Turn.Opponent())) tp.Add(CardCatalog.ById[id]);
+                            foreach (var id in state.GetHand(state.Turn.Opponent())) tp.Add(SimCards.ById[id]);
                             pool = tp;
                         }
                         var session = new SearchSession(view, state.Turn, spec.Profile, moveSeed, pool, ws);
@@ -325,6 +373,7 @@ namespace Edgewise.Sim
                     stats.FirstSolved[sd * 3 + firstPred[sd], actual]++;
                 }
                 var res = GameEngine.Result(state).Value;
+                RecordHands(stats, startHands, res);
                 if (res == GameResult.Draw)
                 {
                     stats.Draws++;

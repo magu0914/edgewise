@@ -13,7 +13,8 @@ namespace Edgewise.Core.AI
         const int PivotBase = HandBase + 2 * SearchBoard.MaxSlots;
         const int PivotStride = GameConstants.MaxPivotTokens + 1; // トークン 0..Max（3 なら従来どおり 4 で、表の値は変わらない）
         const int TurnIndex = PivotBase + 2 * PivotStride;
-        const int Count = TurnIndex + 1;
+        const int GuardBase = TurnIndex + 1; // Phase 6 で末尾に追加（既存のキーの値は変わらない）
+        const int Count = GuardBase + GameConstants.BoardSize;
 
         static readonly ulong[] Keys = Build();
 
@@ -39,6 +40,9 @@ namespace Edgewise.Core.AI
         public static ulong PivotKey(int player, int tokens) => Keys[PivotBase + player * PivotStride + tokens];
 
         public static ulong TurnKey => Keys[TurnIndex];
+
+        /// <summary>そのマスの Guard を使い切った、という状態のキー。</summary>
+        public static ulong GuardUsed(int cell) => Keys[GuardBase + cell];
     }
 
     /// <summary>

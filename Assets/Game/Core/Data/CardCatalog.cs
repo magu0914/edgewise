@@ -55,23 +55,23 @@ namespace Edgewise.Core.Data
             new CardDef("rimeloom", "Rimeloom", 6, new Sides(6, 6, 5, 6), Element.Ice, Tribe.Spirit),
 
             // ---- Lv7 ----
-            new CardDef("leomane", "Leomane", 7, new Sides(9, 4, 6, 5), Element.Holy, Tribe.Beast),
-            new CardDef("forgecolossus", "Forgecolossus", 7, new Sides(6, 8, 4, 7), Element.Fire, Tribe.Machine),
-            new CardDef("auroraveil", "Auroraveil", 7, new Sides(3, 9, 5, 7), Element.Ice, Tribe.Spirit),
-            new CardDef("draconyx", "Draconyx", 7, new Sides(8, 7, 8, 2), Element.Dark, Tribe.Dragon),
-            new CardDef("stormgear", "Stormgear", 7, new Sides(5, 6, 9, 4), Element.Thunder, Tribe.Machine),
+            new CardDef("leomane", "Leomane", 7, new Sides(9, 4, 6, 5), Element.Holy, Tribe.Beast, TraitId.Pierce),
+            new CardDef("forgecolossus", "Forgecolossus", 7, new Sides(6, 8, 4, 7), Element.Fire, Tribe.Machine, TraitId.Rally),
+            new CardDef("auroraveil", "Auroraveil", 7, new Sides(3, 9, 5, 7), Element.Ice, Tribe.Spirit, TraitId.Guard),
+            new CardDef("draconyx", "Draconyx", 7, new Sides(8, 7, 8, 2), Element.Dark, Tribe.Dragon, TraitId.Guard),
+            new CardDef("stormgear", "Stormgear", 7, new Sides(5, 6, 9, 4), Element.Thunder, Tribe.Machine, TraitId.Rally),
 
             // ---- Lv8 ----
-            new CardDef("cygnwraith", "Cygnwraith", 8, new Sides(10, 3, 8, 6), Element.Wind, Tribe.Spirit),
-            new CardDef("taurocrag", "Taurocrag", 8, new Sides(8, 8, 4, 8), Element.Earth, Tribe.Beast),
-            new CardDef("gravelith", "Gravelith", 8, new Sides(4, 9, 9, 5), Element.Earth, Tribe.Machine),
-            new CardDef("voltwyrm", "Voltwyrm", 8, new Sides(9, 5, 3, 10), Element.Thunder, Tribe.Dragon),
-            new CardDef("nocturnis", "Nocturnis", 8, new Sides(6, 10, 2, 9), Element.Dark, Tribe.Spirit),
+            new CardDef("cygnwraith", "Cygnwraith", 8, new Sides(10, 3, 8, 6), Element.Wind, Tribe.Spirit, TraitId.Anchor),
+            new CardDef("taurocrag", "Taurocrag", 8, new Sides(8, 8, 4, 8), Element.Earth, Tribe.Beast, TraitId.Anchor),
+            new CardDef("gravelith", "Gravelith", 8, new Sides(4, 9, 9, 5), Element.Earth, Tribe.Machine, TraitId.Guard),
+            new CardDef("voltwyrm", "Voltwyrm", 8, new Sides(9, 5, 3, 10), Element.Thunder, Tribe.Dragon, TraitId.Anchor),
+            new CardDef("nocturnis", "Nocturnis", 8, new Sides(6, 10, 2, 9), Element.Dark, Tribe.Spirit, TraitId.Rally),
 
             // ---- Lv9 ----
             new CardDef("orionmane", "Orionmane", 9, new Sides(10, 7, 4, 9), Element.Fire, Tribe.Beast),
-            new CardDef("astrolabion", "Astrolabion", 9, new Sides(7, 8, 8, 7), Element.Holy, Tribe.Machine),
-            new CardDef("cassiveil", "Cassiveil", 9, new Sides(3, 10, 9, 8), Element.Water, Tribe.Spirit),
+            new CardDef("astrolabion", "Astrolabion", 9, new Sides(7, 8, 8, 7), Element.Holy, Tribe.Machine, TraitId.Rally),
+            new CardDef("cassiveil", "Cassiveil", 9, new Sides(3, 10, 9, 8), Element.Water, Tribe.Spirit, TraitId.Guard),
             new CardDef("scorpidrake", "Scorpidrake", 9, new Sides(9, 4, 10, 6), Element.Dark, Tribe.Dragon),
             new CardDef("polarion", "Polarion", 9, new Sides(8, 9, 6, 7), Element.Ice, Tribe.Dragon),
 

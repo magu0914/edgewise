@@ -120,7 +120,7 @@ namespace Edgewise.Game.Campaign
             Line(r.Combo, UiText.RuleCombo, UiText.RuleComboDesc);
             Line(r.Elemental, UiText.RuleElemental, UiText.RuleElementalDesc);
             Line(r.SuddenDeath, UiText.RuleSuddenDeath, UiText.RuleSuddenDeathDesc);
-            Line(r.Pivot, UiText.RulePivot, UiText.PivotDesc(r.SuddenDeath));
+            Line(r.Pivot, UiText.RulePivot, UiText.PivotDesc(r));
             bool special = r.Same || r.Plus || r.Combo || r.Elemental || r.SuddenDeath || r.Pivot || r.Random || !r.Open;
             if (!special) lines.Add(new KeyValuePair<string, string>(UiText.RuleBasicName, UiText.RuleBasicDesc));
             return lines;

@@ -48,6 +48,10 @@ namespace Edgewise.Core.Tests.Engine
             Assert.That(GameConstants.MatchPivotTokens(new RuleSet(pivot: true)), Is.EqualTo((1, 2)));
             Assert.That(GameConstants.MatchPivotTokens(new RuleSet(pivot: true, same: true, plus: true, combo: true)), Is.EqualTo((1, 2)));
             Assert.That(GameConstants.MatchPivotTokens(new RuleSet(pivot: true, suddenDeath: true)), Is.EqualTo((1, 1)));
+            // Phase 6: Resonance ON は 1・1（先攻 1・後攻 2 だと Same+Plus+Combo+Pivot+Resonance で先攻勝率が 28.7% まで偏る）。Traits だけなら従来どおり
+            Assert.That(GameConstants.MatchPivotTokens(new RuleSet(pivot: true, resonance: true)), Is.EqualTo((1, 1)));
+            Assert.That(GameConstants.MatchPivotTokens(new RuleSet(pivot: true, resonance: true, traits: true)), Is.EqualTo((1, 1)));
+            Assert.That(GameConstants.MatchPivotTokens(new RuleSet(pivot: true, traits: true)), Is.EqualTo((1, 2)));
             // 既定値（TS 版との突き合わせ）は 2/2 のまま
             Assert.That(GameConstants.PivotTokens, Is.EqualTo(2));
         }

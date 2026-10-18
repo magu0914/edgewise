@@ -18,7 +18,7 @@ namespace Edgewise.Core
         }
     }
 
-    /// <summary>まだ実装していないルール修飾（Resonance / Trait）。TS 版の NotImplementedRuleError。</summary>
+    /// <summary>未実装のルール修飾（Phase 6 で Resonance / Traits を実装したため、現在エンジンは投げない。TS 版 NotImplementedRuleError の互換のために残す）。</summary>
     public sealed class NotImplementedRuleException : Exception
     {
         public string Rule { get; }

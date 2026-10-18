@@ -28,6 +28,15 @@ namespace Edgewise.Sim
         public RulePreset WithPivot(int first, int second) =>
             new RulePreset(Key, Name + " [" + first + "/" + second + "]", Rules, first, second);
 
+        /// <summary>Traits だけ OFF にした同じ行（Trait の効果を、同じ配牌・同じ seed の対照と比べるため）。</summary>
+        public RulePreset WithoutTraits()
+        {
+            var r = Rules;
+            return new RulePreset(Key, Name + " (Traits off)",
+                new RuleSet(r.Open, r.Random, r.Same, r.SameWall, r.Plus, r.Combo, r.Elemental, r.SuddenDeath, r.Pivot, r.Resonance, false),
+                PivotFirst, PivotSecond);
+        }
+
         /// <summary>
         /// --pivot の候補（カンマ区切りの "先攻/後攻"。"game" はゲーム本体の既定値 GameConstants.MatchPivotTokensFirst/Second）。
         /// Pivot OFF のプリセットはそのまま 1 行、Pivot ON のプリセットは候補ごとに 1 行にする。
@@ -97,6 +106,35 @@ namespace Edgewise.Sim
             new RulePreset("all-openoff-nopivot", "All except Pivot (Open OFF)",
                 new RuleSet(open: false, random: true, same: true, sameWall: true, plus: true, combo: true, elemental: true, suddenDeath: true)),
             new RulePreset("suddendeath", "Sudden Death (Open)", new RuleSet(open: true, suddenDeath: true)),
+            // ---- Phase 6: Resonance（共鳴）と Traits（固有能力）。いずれもフリー対戦の選択ルール（星図巡りでは使わない）----
+            new RulePreset("res", "Resonance (Open)", new RuleSet(open: true, resonance: true)),
+            new RulePreset("traits", "Traits (Open)", new RuleSet(open: true, traits: true)),
+            new RulePreset("res-traits", "Resonance+Traits (Open)", new RuleSet(open: true, resonance: true, traits: true)),
+            new RulePreset("pivot-res", "Pivot+Resonance (Open)", new RuleSet(open: true, pivot: true, resonance: true)),
+            new RulePreset("pivot-traits", "Pivot+Traits (Open)", new RuleSet(open: true, pivot: true, traits: true)),
+            new RulePreset("pivot-res-traits", "Pivot+Resonance+Traits (Open)", new RuleSet(open: true, pivot: true, resonance: true, traits: true)),
+            new RulePreset("spc-res", "Same+Plus+Combo+Resonance (Open)",
+                new RuleSet(open: true, same: true, plus: true, combo: true, resonance: true)),
+            new RulePreset("spc-traits", "Same+Plus+Combo+Traits (Open)",
+                new RuleSet(open: true, same: true, plus: true, combo: true, traits: true)),
+            new RulePreset("spc-res-traits", "Same+Plus+Combo+Resonance+Traits (Open)",
+                new RuleSet(open: true, same: true, plus: true, combo: true, resonance: true, traits: true)),
+            // ゲーム本体の既定のルール（Same・Plus・Combo・Pivot。Open）に足した行
+            new RulePreset("spc-pivot-res", "Same+Plus+Combo+Pivot+Resonance (Open)",
+                new RuleSet(open: true, same: true, plus: true, combo: true, pivot: true, resonance: true)),
+            new RulePreset("spc-pivot-traits", "Same+Plus+Combo+Pivot+Traits (Open)",
+                new RuleSet(open: true, same: true, plus: true, combo: true, pivot: true, traits: true)),
+            new RulePreset("spc-pivot-res-traits", "Same+Plus+Combo+Pivot+Resonance+Traits (Open)",
+                new RuleSet(open: true, same: true, plus: true, combo: true, pivot: true, resonance: true, traits: true)),
+            new RulePreset("all-res", "All incl. Pivot + Resonance (Open)",
+                new RuleSet(open: true, random: true, same: true, sameWall: true, plus: true, combo: true, elemental: true, suddenDeath: true, pivot: true, resonance: true)),
+            new RulePreset("all-traits", "All incl. Pivot + Traits (Open)",
+                new RuleSet(open: true, random: true, same: true, sameWall: true, plus: true, combo: true, elemental: true, suddenDeath: true, pivot: true, traits: true)),
+            new RulePreset("all-res-traits", "All incl. Pivot + Resonance + Traits (Open)",
+                new RuleSet(open: true, random: true, same: true, sameWall: true, plus: true, combo: true, elemental: true, suddenDeath: true, pivot: true, resonance: true, traits: true)),
+            new RulePreset("res-traits-openoff", "Resonance+Traits (Open OFF)", new RuleSet(open: false, resonance: true, traits: true)),
+            new RulePreset("all-res-traits-openoff", "All incl. Pivot + Resonance + Traits (Open OFF)",
+                new RuleSet(open: false, random: true, same: true, sameWall: true, plus: true, combo: true, elemental: true, suddenDeath: true, pivot: true, resonance: true, traits: true)),
             Region(1), Region(2), Region(3), Region(4),
         };
 
@@ -116,6 +154,19 @@ namespace Edgewise.Sim
             {
                 var key = raw.Trim().ToLowerInvariant();
                 if (key.Length == 0) continue;
+                if (key == "phase6")
+                {
+                    // Phase 6 の合格条件を見る行（docs/BALANCE.md「Phase 6」）
+                    foreach (var k in new[]
+                    {
+                        "res", "traits", "res-traits",                                      // Basic（Open）
+                        "pivot-res", "pivot-traits", "pivot-res-traits",                    // Basic + Pivot
+                        "spc-res-traits",                                                    // Same+Plus+Combo
+                        "spc-pivot-res", "spc-pivot-traits", "spc-pivot-res-traits",        // ゲーム本体の既定（Same+Plus+Combo+Pivot）
+                        "all-res", "all-traits", "all-res-traits",                          // 全部入り
+                    }) result.Add(Find(k));
+                    continue;
+                }
                 if (key == "default")
                 {
                     result.Add(Find("basic"));

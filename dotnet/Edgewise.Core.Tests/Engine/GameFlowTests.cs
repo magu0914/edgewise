@@ -99,10 +99,11 @@ namespace Edgewise.Core.Tests.Engine
         }
 
         [Test]
-        public void ResonanceAndTraitAreNotImplementedYet()
+        public void ResonanceAndTraitsAreAcceptedSinceTheyAreImplemented()
         {
-            Assert.Throws<NotImplementedRuleException>(() => GameEngine.CreateGame(Decks.Config(new RuleSet(resonance: true), 1)));
-            Assert.Throws<NotImplementedRuleException>(() => GameEngine.CreateGame(Decks.Config(new RuleSet(traits: true), 1)));
+            Assert.DoesNotThrow(() => GameEngine.CreateGame(Decks.Config(new RuleSet(resonance: true), 1)));
+            Assert.DoesNotThrow(() => GameEngine.CreateGame(Decks.Config(new RuleSet(traits: true), 1)));
+            Assert.DoesNotThrow(() => GameEngine.CreateGame(Decks.Config(new RuleSet(resonance: true, traits: true), 1)));
         }
 
         [Test]

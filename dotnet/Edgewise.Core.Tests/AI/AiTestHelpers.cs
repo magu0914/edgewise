@@ -56,13 +56,14 @@ namespace Edgewise.Core.Tests.AI
 
         /// <summary>ランダムな局面を作る: ランダムなルール・デッキで始め、ランダムに plies 手進める（終局したら null）。</summary>
         public static GameState RandomPosition(TestRandom r, int plies, IReadOnlyList<CardDef> cards = null, bool? open = null,
-            bool? suddenDeath = null, bool? pivot = null, bool? same = null, bool? plus = null, bool? combo = null)
+            bool? suddenDeath = null, bool? pivot = null, bool? same = null, bool? plus = null, bool? combo = null,
+            bool resonance = false, bool traits = false)
         {
-            var rules = H.RandomRules(r, suddenDeath: suddenDeath, pivot: pivot, same: same, plus: plus, combo: combo);
+            var rules = H.RandomRules(r, suddenDeath: suddenDeath, pivot: pivot, same: same, plus: plus, combo: combo, resonance: resonance, traits: traits);
             if (open.HasValue)
             {
                 rules = new RuleSet(open.Value, rules.Random, rules.Same, rules.SameWall, rules.Plus, rules.Combo, rules.Elemental,
-                    rules.SuddenDeath, rules.Pivot);
+                    rules.SuddenDeath, rules.Pivot, rules.Resonance, rules.Traits);
             }
             var state = GameEngine.CreateGame(H.RandomConfig(r, rules, cards));
             for (int i = 0; i < plies && state.Phase == Phase.Playing; i++)

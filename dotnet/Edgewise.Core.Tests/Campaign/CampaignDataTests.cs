@@ -46,6 +46,21 @@ namespace Edgewise.Core.Tests.Campaign
         }
 
         [Test]
+        public void TheCampaignNeverUsesResonanceOrTraits()
+        {
+            // Phase 6: Resonance / Traits はフリー対戦とオンラインの選択ルール。星図巡りの勝率の調整（5a）を崩さないため、主との対戦を含めて OFF のまま
+            foreach (var o in CampaignData.Opponents)
+            {
+                var rules = CampaignRules.MatchRules(o);
+                Assert.That(rules.Resonance, Is.False, o.Id);
+                Assert.That(rules.Traits, Is.False, o.Id);
+                var deck = CampaignData.StarterCards.Take(5).ToArray();
+                var config = CampaignRules.MatchConfig(o, deck, deck, 1);
+                Assert.That(config.Rules.Resonance || config.Rules.Traits, Is.False, o.Id);
+            }
+        }
+
+        [Test]
         public void StarterHasSevenLevelOneOrTwoCards()
         {
             Assert.That(CampaignData.StarterCards.Count, Is.EqualTo(7));

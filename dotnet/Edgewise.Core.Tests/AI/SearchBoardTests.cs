@@ -15,7 +15,7 @@ namespace Edgewise.Core.Tests.AI
             Assert.That(b.ComputeHashSlow(), Is.EqualTo(b.Hash));
             ulong hash0 = b.Hash;
             int occ0 = b.Occupied, own0 = b.OwnerP1, turn0 = b.Turn;
-            int hm0 = b.HandMask[0], hm1 = b.HandMask[1], pv0 = b.Pivot[0], pv1 = b.Pivot[1];
+            int hm0 = b.HandMask[0], hm1 = b.HandMask[1], pv0 = b.Pivot[0], pv1 = b.Pivot[1], guard0 = b.GuardUsedMask;
 
             foreach (var m in GameEngine.LegalMoves(s))
             {
@@ -35,6 +35,12 @@ namespace Edgewise.Core.Tests.AI
                     }
                     var sc = GameEngine.Score(expected);
                     Assert.That(b.ScoreDiffP0(), Is.EqualTo(sc.P0 - sc.P1));
+                    int guardExpected = 0;
+                    for (int c = 0; c < 9; c++)
+                    {
+                        if (expected.Board[c].HasValue && expected.Board[c].Value.GuardUsed) guardExpected |= 1 << c;
+                    }
+                    Assert.That(b.GuardUsedMask, Is.EqualTo(guardExpected), "Guard used after " + m + " in " + StateHash.Serialize(s));
                 }
                 Assert.That(b.Pivot[0], Is.EqualTo(expected.GetPivotTokens(Player.P0)));
                 Assert.That(b.Pivot[1], Is.EqualTo(expected.GetPivotTokens(Player.P1)));
@@ -49,6 +55,7 @@ namespace Edgewise.Core.Tests.AI
                 Assert.That(b.HandMask[1], Is.EqualTo(hm1));
                 Assert.That(b.Pivot[0], Is.EqualTo(pv0));
                 Assert.That(b.Pivot[1], Is.EqualTo(pv1));
+                Assert.That(b.GuardUsedMask, Is.EqualTo(guard0));
             }
         }
 
