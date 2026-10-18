@@ -360,7 +360,8 @@ namespace Edgewise.Game.UI
         public const string OnlineCreate = "部屋を作る";
         public const string OnlineJoinLabel = "部屋コードを入れて、部屋に入る";
         public const string OnlineJoin = "入る";
-        public const string OnlineCodeHint = "6 文字のコード";
+        public const string OnlineCodeHint = "タップして入力";
+        public const string OnlinePromptCode = "部屋コード（6 文字）を入力してください";
         public const string OnlineCodeLabel = "部屋コード";
         public const string OnlineCopyCode = "コードをコピー";
         public const string OnlineCopyUrl = "URL をコピー";

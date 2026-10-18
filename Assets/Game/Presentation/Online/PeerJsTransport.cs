@@ -215,4 +215,21 @@ namespace Edgewise.Game.Online
 #endif
         }
     }
+
+    /// <summary>ブラウザの入力ダイアログ（WebGL のみ。ほかの環境と取り消しは空文字）。</summary>
+    public static class PromptUtil
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        [DllImport("__Internal")] static extern string EdgewisePrompt_Ask(string message, string defaultText);
+#endif
+
+        public static string Ask(string message, string defaultText)
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            try { return EdgewisePrompt_Ask(message, defaultText ?? "") ?? ""; } catch (Exception) { return ""; }
+#else
+            return "";
+#endif
+        }
+    }
 }

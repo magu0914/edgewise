@@ -128,4 +128,17 @@ mergeInto(LibraryManager.library, {
     window.__edgewiseCopied = text;
     return ok;
   },
+
+  // スマホにはキーボード入力の手段がないため、ブラウザの入力ダイアログで文字列を受け取る。取り消しは空文字
+  EdgewisePrompt_Ask: function (messagePtr, defaultPtr) {
+    var result = '';
+    try {
+      var r = window.prompt(UTF8ToString(messagePtr), UTF8ToString(defaultPtr));
+      if (r !== null && r !== undefined) result = String(r);
+    } catch (e) { result = ''; }
+    var size = lengthBytesUTF8(result) + 1;
+    var buf = _malloc(size);
+    stringToUTF8(result, buf, size);
+    return buf;
+  },
 });

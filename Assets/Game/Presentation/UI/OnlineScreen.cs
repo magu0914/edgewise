@@ -108,6 +108,20 @@ namespace Edgewise.Game.UI
             backButton.onClick.AddListener(() => BackPressed?.Invoke());
             copyCodeButton.onClick.AddListener(() => Copy(_code));
             copyUrlButton.onClick.AddListener(() => Copy(_inviteUrl));
+            // 欄そのものは表示だけなので、タップ・クリックでブラウザの入力ダイアログを開けるようにする（スマホにはキー入力がない）
+            codeBox.raycastTarget = true;
+            var tap = codeBox.GetComponent<Button>();
+            if (tap == null) tap = codeBox.gameObject.AddComponent<Button>();
+            tap.transition = Selectable.Transition.None;
+            tap.onClick.AddListener(AskCode);
+        }
+
+        void AskCode()
+        {
+            if (CurrentMode != Mode.Menu) return;
+            string entered = PromptUtil.Ask(UiText.OnlinePromptCode, _typed.ToString());
+            if (string.IsNullOrEmpty(entered)) return;
+            SetTyped(entered);
         }
 
         void OnDisable()
