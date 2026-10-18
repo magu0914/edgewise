@@ -425,6 +425,19 @@ type GameEvent =
 - 隠し情報（Open OFF）はホストには見えてしまう。カジュアル対戦として割り切り、その旨を画面と README に明記する。
 - 切断時: 再接続を 30 秒待ち、戻らなければ不戦勝。
 
+### 9-1. 詳細設計（Phase 7、2026-10-18）
+- **範囲**: フリー対戦のみ（星図巡りの手持ちは使わない）。CPU・ヒントはオンラインでは使えない。
+- **入口**: フリー対戦の設定画面に「オンライン対戦」→「部屋を作る」／「部屋に入る（コード入力）」。招待 URL `?room=ABC234` で開くと、その部屋に自動で入る。
+- **部屋コード**: 6 文字（紛らわしい 0/O/1/I/L を除いた英大文字と数字）。PeerJS の ID は `edgewise-v1-<コード>`。PeerJS の既定の公開サーバー（0.peerjs.com）を使う。
+- **対戦の準備**: ホストがルールとカードの強さ帯を選ぶ（今の設定画面と同じ部品）。ホストが seed を決め、`{protocol, rules, band, seed, hostIsP0}` をゲストに送る。両者が同じ設定から `CreateGame` するので、配牌・先攻・属性マスは決定論的に一致する。
+- **手番**: 自分の手番で置いた Move を `{type:"move", seq, move, hashAfter}` で送る。受け取った側は `ApplyMove` し、自分の `HashState` と `hashAfter` を比べる。食い違ったら対戦を中断して両者に知らせる。順番違い・重複は `seq` で弾く。
+- **表示**: 自分は常に手前（P0 の位置）に見えるようにする。Open OFF では相手の手札を伏せて表示する（データ上はどちらの端末も全情報を持つ。カジュアル対戦として画面と README に明記）。演出（EventPlayer）は CPU 戦と同じ。
+- **再戦**: 結果画面の「もう一度」を両者が押したら、ホストが新しい seed で始める。
+- **切断**: 相手が切れたら「再接続を待っています（30 秒）」を出し、戻らなければ不戦勝。こちらから「部屋を出る」もできる。
+- **プロトコルのバージョン**: 最初のメッセージに `protocol` を入れ、合わなければ「バージョンが違います」で接続を断る。
+- **実装の分け方**: 通信は `ITransport`（送受信と接続状態）で抽象化する。WebGL では jslib 経由の `PeerJsTransport`、エディタとテストでは `LoopbackTransport`（同じプロセス内の 2 つの端点）。対戦の進行（`OnlineMatchSession`: メッセージの組み立て・検証・seq・hash 照合）は通信から切り離して、EditMode テストで検証する。
+- **PeerJS の同梱**: `D:\Projects\tripletriad-vendor\peerjs-1.5.4\peerjs.min.js`（cdnjs から取得。sha512 は cdnjs の SRI と一致を確認済み: `sha512-iFU+yF1keEaLDC9HEwPfLMSRaS0unBHE14GEgx6pQKJXjp5v0tvX8xpfp2lgJ62XEjbYp/M5C3CAmej/PWXMyA==`）を `Assets/Plugins/WebGL/` に `.jspre` として置き、ビルドに同梱する。MIT ライセンスを `docs/CREDITS.md` に記録する。
+
 ---
 
 ## 10. 開発フェーズ
