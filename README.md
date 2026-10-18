@@ -7,7 +7,7 @@
 3×3 の盤にカードを置き、隣の相手カードより大きい数字の辺で裏返して陣地を取り合う対戦カードゲームです。Triple Triad（FF8）のルールの仕組みへのオマージュで、カード・名前・絵・音はすべてオリジナル（または出典を明記したフリー素材）です。
 
 - **ブラウザで遊ぶ（GitHub Pages）**: https://magu0914.github.io/edgewise/
-- **ブラウザで遊ぶ（unityroom）**: {{UNITYROOM_URL}}
+- **ブラウザで遊ぶ（unityroom）**: https://unityroom.com/games/edgewise
 - リポジトリ: https://github.com/magu0914/edgewise
 
 | | |

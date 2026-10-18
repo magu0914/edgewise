@@ -56,7 +56,7 @@ powershell -ExecutionPolicy Bypass -File tools/deploy_pages.ps1 -Push
 | Compression Format | **Gzip** | 同上 |
 | Decompression Fallback | **オフ** | 同上 |
 | Unity のバージョン | ゲームの「WebGL設定」で、ビルドに使ったバージョンを選ぶ（本作は 6000.3.15f1 なので **6000.3.x**） | unityroom の運営者のブログ「unityroomに投稿する方法」http://blog.naichilab.com/entry/how-to-upload-unityroom （unityroom ヘルプ「ゲームの投稿方法」https://help.unityroom.com/2e9dc3ed5de9803ab110fe3b05138bd5 からのリンク）。Unity 6 での選び方は Qiita の解説 https://qiita.com/kurisaka_konabe/items/73471f00439befea807d でも確認 |
-| アップロードするファイル | ビルドの `Build/` にできる **4 ファイル**（`.loader.js` / `.data.gz` / `.framework.js.gz` / `.wasm.gz`）を「WebGLアップロード」で 1 つずつ選ぶ。拡張子を取り違えないこと | 運営者のブログ（上記。「拡張子をよく見て、間違えない様に選択してください」）、Qiita の解説（「これら 4 つのファイルが unityroom の投稿で必要」） |
+| アップロードするファイル | ビルドの `Build/` にできる **4 ファイル**（`.loader.js` / `.data.gz` / `.framework.js.gz` / `.wasm.gz`）を、**`Build` フォルダごと**アップロード欄にドラッグ＆ドロップする（2026-10 時点の新しい画面。以前の「1 つずつ選ぶ」方式から変わった） | 運営者のブログ（上記。「拡張子をよく見て、間違えない様に選択してください」）、Qiita の解説（「これら 4 つのファイルが unityroom の投稿で必要」） |
 | 公開に最低限必要なもの | アイコンと WebGL のアップロード | 運営者のブログ（上記） |
 | 日本語の表示 | 既定のフォントでは日本語が出ないので、フォントを入れておく | unityroom ヘルプ「Unity WebGLにビルドすると日本語が表示されません」https://help.unityroom.com/Unity-WebGL-2e9dc3ed5de9800583c6fd847a715747 。本作は Noto Sans JP の静的 SDF を同梱しているので対応済み |
 
@@ -78,7 +78,7 @@ powershell -ExecutionPolicy Bypass -File tools/package_unityroom.ps1 -SkipBuild 
 1. https://unityroom.com/ にログインし、ヘッダーから新しいゲームを作る（タイトル・ゲーム ID（英数字・`-`・`_`。URL の一部になる）・短い説明）。
 2. **基本情報**: アイコンを設定する（必須。正方形に近い画像。例: `docs/media/title.jpg` の扇の部分を切り出したもの）。
 3. **WebGL設定**: Unity のバージョンで **6000.3.x** を選ぶ（**間違えないこと**）。画面サイズは既定の 960×540 のまま。
-4. **WebGLアップロード**: `Builds/unityroom/` の 4 ファイルを、欄の拡張子に合わせて 1 つずつ選んでアップロードする。成功するとページの下にファイルのサイズなどが出る。
+4. **WebGLアップロード**: `Builds/unityroom-build/edgewise/Build` フォルダを、エクスプローラーからアップロード欄へフォルダごとドラッグ＆ドロップする。「必要なファイルが見つかりません」と出たら、フォルダの場所（`Builds/unityroom/` ではない）を確かめ、中の 4 ファイルをまとめてドロップするか、親の `edgewise` フォルダをドロップする。成功するとページの下にファイルのサイズなどが出る。アップロード後、管理画面で公開状態を「公開」にする（2026-10-18 実施、公開 URL: https://unityroom.com/games/edgewise）。
 5. 説明文に、オマージュの表記（「本作は Triple Triad（© SQUARE ENIX）へのオマージュ作品であり、公式とは無関係です。」）と、クレジット（game-icons.net CC BY 3.0 の作者、OpenTracks の曲、Noto Sans JP）、リポジトリの URL を書く（README の「クレジットとオマージュの表記」と同じ内容）。
 6. **公開設定**で公開する前に、限定公開などで一度遊んで確かめる（タイトル → 遊び方 → フリー対戦 1 局、音が鳴るか）。
 7. 公開したら、README と この文書の `{{UNITYROOM_URL}}` を実際の URL に置き換える。
