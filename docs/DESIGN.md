@@ -155,6 +155,7 @@ docs/
 - **バランスの目標**（Hard 同士、席交代つき）: Resonance ON・Traits ON・両方 ON のそれぞれで、先攻勝率 45〜55%（引き分け除く）。Trait 付きのカードを含む手札の勝率が、含まない手札より極端に高くならないこと（差は 15 ポイント以内を目安）。結果は `docs/BALANCE.md`「Phase 6」に記録する。
 - **画面**: 対戦設定のルール一覧に Resonance・Traits を追加（短い説明つき）。カードの右下に Trait の漢字 1 字のバッジ。図鑑の拡大表示と、対戦中のルール確認に Trait の説明。メニューの「ルール確認」と「遊び方」の注記も更新する。
 - **ゴールデンとの互換**: Resonance・Traits が OFF のときの結果は今と完全に同じ（TS 版とのゴールデン突き合わせを壊さない）。
+- **実装で確定したこと（2026-10-19）**: Trait の配分は Pierce 1（Leomane。強すぎるため 1 枚に限定）・Guard 4・Rally 4・Anchor 3。Pierce で取ったカードの cause は basic、Guard は Pierce も防ぐ。Rally は置いた時点の隣接数で数える。Anchor が防いでもイベントは出さない。**Resonance ON のときは Pivot のトークンを 1・1**（1・2 のままだと先攻勝率 28.7% に偏ったため）。数値は `docs/BALANCE.md`「Phase 6」。
 
 ---
 
