@@ -5,6 +5,7 @@ using Edgewise.Game.Campaign;
 using Edgewise.Game.Juice;
 using Edgewise.Game.Controls;
 using Edgewise.Game.Match;
+using Edgewise.Game.Online;
 using Edgewise.Game.UI;
 using Edgewise.Game.View;
 using UnityEditor;
@@ -96,6 +97,7 @@ namespace Edgewise.EditorTools
             stage.Wire(assets, layout);
             stageGo.SetActive(false);
             var campaign = game.AddComponent<CampaignController>();
+            var online = game.AddComponent<OnlineController>();
 
             // ---- UI ----
             var canvasGo = new GameObject("Canvas", typeof(RectTransform));
@@ -125,6 +127,11 @@ namespace Edgewise.EditorTools
             result.Build(assets);
             var menu = MakeScreen<MenuPanel>("Menu", canvasGo.transform);
             menu.Build(assets);
+            // オンライン対戦（Phase 7）: 部屋の画面と、対戦中の「再接続を待っています」の帯
+            var onlineScreen = MakeScreen<OnlineScreen>("Online", canvasGo.transform);
+            onlineScreen.Build(assets);
+            var onlineNotice = MakeScreen<OnlineNotice>("OnlineNotice", canvasGo.transform);
+            onlineNotice.Build(assets);
             var dex = MakeScreen<CardDex>("Dex", canvasGo.transform);
             dex.Build(assets, layout, dexRoot.transform);
             var credits = MakeScreen<CreditsScreen>("Credits", canvasGo.transform);
@@ -158,6 +165,8 @@ namespace Edgewise.EditorTools
             hud.gameObject.SetActive(false);
             result.gameObject.SetActive(false);
             menu.gameObject.SetActive(false);
+            onlineScreen.gameObject.SetActive(false);
+            onlineNotice.gameObject.SetActive(false);
 
             var esGo = new GameObject("EventSystem");
             esGo.AddComponent<EventSystem>();
@@ -165,12 +174,13 @@ namespace Edgewise.EditorTools
             module.AssignDefaultActions();
 
             match.Wire(assets, board, hand0, hand1, hud, banner, layout, player, cards, juiceFx);
-            flow.Wire(assets, table, title, setup, hud, menu, result, banner, match, fps, settings, bgm, dex, credits, fan, campaign, howTo);
+            flow.Wire(assets, table, title, setup, hud, menu, result, banner, match, fps, settings, bgm, dex, credits, fan, campaign, howTo, online);
+            online.Wire(flow, onlineScreen, onlineNotice);
             campaign.Wire(flow, map, region, deck, dialogue, reward, cleared, ending, endRoll);
             table.SetActive(false);
 
             foreach (var c in new Component[] { layout, match, flow, board, hud, title, setup, result, menu, banner, settings, sfx, juiceFx, bgm, dex, credits, fan,
-                         campaign, stage, map, region, deck, reward, dialogue, cleared, ending, howTo, endRoll })
+                         campaign, stage, map, region, deck, reward, dialogue, cleared, ending, howTo, endRoll, online, onlineScreen, onlineNotice })
                 EditorUtility.SetDirty(c);
             EditorSceneManager.MarkSceneDirty(scene);
             // 保存前の内容（中身が同じなら書き戻さず、git の差分を出さない）

@@ -39,6 +39,21 @@ namespace Edgewise.Game.UI
         /// <summary>「次へ」が押せる状態か（テスト用）。</summary>
         public bool NextReady => nextButton != null && nextButton.gameObject.activeSelf;
 
+        /// <summary>オンライン対戦の結果画面: 「設定を変える」が「部屋を出る」になり、「もう一度」は相手の返事を待てる（Phase 7）。</summary>
+        public void SetOnline(bool online)
+        {
+            settingsButton.GetComponentInChildren<TextMeshProUGUI>().text = online ? UiText.OnlineLeave : UiText.ChangeSettings;
+            againButton.GetComponentInChildren<TextMeshProUGUI>().text = UiText.Again;
+            againButton.interactable = true;
+        }
+
+        /// <summary>「もう一度」を押して相手を待っている間は押せなくする。</summary>
+        public void SetAgainWaiting(bool waiting)
+        {
+            againButton.interactable = !waiting;
+            againButton.GetComponentInChildren<TextMeshProUGUI>().text = UiText.Again;
+        }
+
         public bool IsShown => gameObject.activeSelf;
         public string ResultLabel => resultText != null ? resultText.text : "";
         public Button AgainButton => againButton;
@@ -97,13 +112,13 @@ namespace Edgewise.Game.UI
 
         /// <summary>結果を出す。席 0（プレイヤー）から見た勝敗。</summary>
         public async Awaitable Show((int P0, int P1) score, GameResult result, bool resigned, JuiceSettings juice, float timeFactor,
-            CancellationToken ct, Action onReveal = null, Action<int> onTick = null)
+            CancellationToken ct, Action onReveal = null, Action<int> onTick = null, string noteText = null)
         {
             gameObject.SetActive(true);
             resultText.text = "";
             score0.text = "0";
             score1.text = "0";
-            note.text = resigned ? UiText.Resigned : "";
+            note.text = noteText ?? (resigned ? UiText.Resigned : "");
             againButton.gameObject.SetActive(false);
             settingsButton.gameObject.SetActive(false);
             nextButton.gameObject.SetActive(false);

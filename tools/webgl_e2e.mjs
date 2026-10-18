@@ -53,6 +53,8 @@ const profile = mkdtempSync(join(tmpdir(), 'edgewise-chrome-'));
 const chrome = spawn(CHROME, [
   '--headless=new', `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check',
   '--window-size=1280,720', '--hide-scrollbars', '--mute-audio', '--enable-gpu', '--ignore-gpu-blocklist', '--use-angle=d3d11',
+  // オンライン対戦の E2E: 同じ PC の 2 ページが WebRTC でつながるように、ローカルアドレスを mDNS で隠さない。2 ページとも動かし続ける
+  ...(args.scenario === 'online' ? ['--disable-features=WebRtcHideLocalIpsWithMdns', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'] : []),
   'about:blank',
 ], { stdio: 'ignore', windowsHide: true });
 
@@ -60,8 +62,9 @@ let ws;
 let onEvent = null; // CDP のその他のイベント（8a: 画面キャプチャの Page.screencastFrame）
 let nextId = 1;
 const pending = new Map();
-const consoleLines = [];
+let consoleLines = [];
 const rawConsole = [];
+const pages = new Map(); // オンラインの E2E: sessionId → { lines, ... }（ホストとゲストの 2 ページ）
 let sessionId;
 
 function send(method, params = {}, sid = sessionId) {
@@ -89,13 +92,15 @@ async function connect() {
           if (rawConsole.length < 400) rawConsole.push(m.params.type + ' ' + m.params.args.map((a) => a.value ?? a.description ?? '').join(' '));
           const text = m.params.args.map((a) => a.value ?? a.description ?? '').join(' ');
           const t = Date.now();
+          const out = (m.sessionId && pages.get(m.sessionId)?.lines) || consoleLines;
           if (text.includes('[EW]')) {
-            for (const line of text.split('\n')) if (line.includes('[EW]')) consoleLines.push({ t, line: line.slice(line.indexOf('[EW]') + 5) });
+            for (const line of text.split('\n')) if (line.includes('[EW]')) out.push({ t, line: line.slice(line.indexOf('[EW]') + 5) });
           } else if (/error|exception/i.test(text) || m.params.type === 'error') {
-            consoleLines.push({ t, line: 'CONSOLE ' + JSON.stringify(m.params.args).replace(/\s+/g, ' ').slice(0, 800) });
+            out.push({ t, line: 'CONSOLE ' + JSON.stringify(m.params.args).replace(/\s+/g, ' ').slice(0, 800) });
           }
         } else if (m.method === 'Runtime.exceptionThrown') {
-          consoleLines.push({ t: Date.now(), line: 'EXCEPTION ' + JSON.stringify(m.params.exceptionDetails).slice(0, 400) });
+          const out = (m.sessionId && pages.get(m.sessionId)?.lines) || consoleLines;
+          out.push({ t: Date.now(), line: 'EXCEPTION ' + JSON.stringify(m.params.exceptionDetails).slice(0, 400) });
         } else if (m.method && onEvent) {
           onEvent(m);
         }
@@ -1601,9 +1606,242 @@ async function runMedia() {
   log('frames', frames.length);
 }
 
+// ---------------------------------------------------------------------------
+// Phase 7: オンライン対戦（本物の PeerJS）。ヘッドレス Chrome に 2 ページ（ホスト・ゲスト）を開き、
+//   ホスト: タイトル → フリー対戦 → Open を OFF → オンライン対戦 → 部屋を作る（部屋コードが出る）
+//   ゲスト: 招待 URL（?room=コード）で開いて自動で入る
+//   → 両者が 1 局を最後まで（マウスで置く）→ 結果の一致（スコア・最終局面の hash）→ 再戦の開始（新しい seed・席が入れ替わる）
+//   --typed 1 を付けると、ゲストは招待 URL ではなくコードをキーボードで入力して入る
+//   node tools/webgl_e2e.mjs --scenario online --serve Builds/WebGL --serve-port 8791 --port 9391 --out Logs/shots/7
+// 2 ページのコンソールは別々に溜め（pages）、use(P) で「いまのページ」を切り替えて既存の道具（waitLine / click / shot）を使う。
+// 切り替えは 1 本の流れの中でだけ行う（2 ページを同時に await しない）。
+// 撮影は最小限: 部屋の画面（ホスト）と対戦中（ゲスト。席 1 だが自分が手前、Open OFF で相手の手札が裏）の 2 枚。
+// ---------------------------------------------------------------------------
+let currentPage = null;
+function use(P) {
+  if (currentPage) currentPage.cursor = cursor;
+  currentPage = P;
+  consoleLines = P.lines;
+  cursor = P.cursor;
+  sessionId = P.sid;
+}
+
+async function openPage(name) {
+  const { targetId } = await send('Target.createTarget', { url: 'about:blank', newWindow: true }, undefined);
+  const sid = (await send('Target.attachToTarget', { targetId, flatten: true }, undefined)).sessionId;
+  const P = { name, sid, targetId, lines: [], cursor: 0, scan: 0, done: false, moves: 0 };
+  pages.set(sid, P);
+  await send('Runtime.enable', {}, sid);
+  await send('Page.enable', {}, sid);
+  await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false }, sid);
+  await send('Emulation.setFocusEmulationEnabled', { enabled: true }, sid);
+  return P;
+}
+
+/** いまのページ（use 済み）で、自分の手番の 1 手を指す。裏返る枚数が最も多い手（手札とマスの位置はログから）。 */
+async function playOnlineTurn(turn) {
+  const choice = [...turn.options].sort((a, b) => b.flips - a.flips)[0];
+  const card = turn.hand[choice.h];
+  const cell = turn.cells[choice.c];
+  await sleep(150);
+  await move(card.x, card.y);
+  await sleep(100);
+  await mouse('mousePressed', card.x, card.y);
+  await sleep(100);
+  await drag(card.x, card.y, cell.x, cell.y, 12);
+  await sleep(250);
+  await mouse('mouseReleased', cell.x, cell.y);
+}
+
+/** 2 ページが終局（end 行）するまで、手番が来たページから順に指す。shotAt(P, movesSoFar) で撮影の機会を渡す。 */
+async function playOnlineBoth(host, guest, shotAt) {
+  const t0 = Date.now();
+  for (const P of [host, guest]) { P.done = false; P.moves = 0; P.scan = P.lines.length > 0 ? P.scan : 0; }
+  while (!(host.done && guest.done)) {
+    if (Date.now() - t0 > 300000) throw new Error('timeout playing the online match');
+    let acted = false;
+    for (const P of [host, guest]) {
+      if (P.done) continue;
+      use(P);
+      const rest = P.lines.slice(P.scan);
+      const end = rest.findIndex((l) => /^end /.test(l.line));
+      const aw = rest.findIndex((l) => /^await turn=/.test(l.line));
+      if (end >= 0 && (aw < 0 || end < aw)) {
+        P.endLine = rest[end].line;
+        P.scan += end + 1;
+        P.done = true;
+        acted = true;
+        continue;
+      }
+      if (aw >= 0) {
+        cursor = P.scan + aw;
+        const turn = await readTurn();
+        P.scan = turn.index + 1;
+        if (shotAt) await shotAt(P, P.moves);
+        log(`${P.name}: move ${P.moves}`);
+        await playOnlineTurn(turn);
+        P.moves++;
+        acted = true;
+      }
+    }
+    if (!acted) await sleep(60);
+  }
+}
+
+function lineIndex(P, re, from = 0) {
+  for (let i = from; i < P.lines.length; i++) if (re.test(P.lines[i].line)) return i;
+  return -1;
+}
+
+async function runOnline() {
+  const checks = {};
+  const host = await openPage('host');
+  const guest = await openPage('guest');
+
+  // ---- ホスト: タイトル → フリー対戦 → Open OFF → オンライン対戦 → 部屋を作る ----
+  use(host);
+  log('host open', `${BASE}?log&speed=x2`);
+  await send('Page.navigate', { url: `${BASE}?log&speed=x2` });
+  const tAt = (await waitLine(/^screen Title/, 120000)).index;
+  await sleep(800);
+  await click(...Object.values(uiRect('Title', 'StartButton', tAt)));
+  const setupAt = (await waitLine(/^screen Setup/, 10000, tAt)).index;
+  await sleep(500);
+  await click(...Object.values(uiRect('Setup', 'Rule_Open', setupAt)));   // Open OFF（相手の手札は裏で表示される）
+  await sleep(250);
+  await click(...Object.values(uiRect('Setup', 'SetupOnlineButton', setupAt)));
+  const menuAt = (await waitLine(/^screen Online/, 10000, setupAt)).index;
+  await sleep(400);
+  await click(...Object.values(uiRect('Online', 'OnlineCreateButton', menuAt)));
+  const room = await waitLine(/^online screen Room code=([A-Z2-9]{6})/, 10000, menuAt);
+  const code = room.m[1];
+  checks.roomCode = code;
+  log('room code', code);
+  // PeerJS の公開サーバーに部屋を登録できるまで待つ（できなければ Failed / error の行が出る）
+  const regAt = Date.now();
+  let registered = false;
+  while (Date.now() - regAt < 30000 && !registered) {
+    registered = lineIndex(host, /^online transport Waiting/, menuAt) >= 0;
+    if (!registered && lineIndex(host, /^online (error|transport Failed)/, menuAt) >= 0) break;
+    await sleep(100);
+  }
+  checks.hostRegistered = registered;
+  checks.hostRegisterMs = Date.now() - regAt;
+  if (!registered) {
+    throw new Error('the room could not be registered on the PeerJS server\n' + host.lines.slice(-12).map((l) => l.line).join('\n'));
+  }
+  await sleep(500);
+  await shot('01_room');   // 部屋の画面（コード・招待 URL・コピーボタン・注記）
+
+  // ---- ゲスト: 招待 URL で開く（自動で部屋に入る） ----
+  use(guest);
+  if (args.typed) {
+    // --typed: 招待 URL を使わず、タイトル → フリー対戦 → オンライン対戦 → コードをキーボードで入力 → 入る
+    const url0 = `${BASE}?log&speed=x2`;
+    log('guest open (typed code)', url0);
+    await send('Page.navigate', { url: url0 });
+    const gt = (await waitLine(/^screen Title/, 120000)).index;
+    await sleep(800);
+    await click(...Object.values(uiRect('Title', 'StartButton', gt)));
+    const gs = (await waitLine(/^screen Setup/, 10000, gt)).index;
+    await sleep(400);
+    await click(...Object.values(uiRect('Setup', 'SetupOnlineButton', gs)));
+    const gm0 = (await waitLine(/^screen Online/, 10000, gs)).index;
+    await sleep(400);
+    for (const ch of code.toLowerCase()) {
+      const up = ch.toUpperCase();
+      const vk = up.charCodeAt(0);
+      await send('Input.dispatchKeyEvent', { type: 'keyDown', key: ch, code: /\d/.test(ch) ? 'Digit' + ch : 'Key' + up, text: ch, unmodifiedText: ch, windowsVirtualKeyCode: vk });
+      await send('Input.dispatchKeyEvent', { type: 'keyUp', key: ch, code: /\d/.test(ch) ? 'Digit' + ch : 'Key' + up, windowsVirtualKeyCode: vk });
+      await sleep(80);
+    }
+    await sleep(300);
+    await click(...Object.values(uiRect('Online', 'OnlineJoinButton', gm0)));
+    checks.typedJoin = true;
+  } else {
+    const guestUrl = `${BASE}?log&speed=x2&room=${code}`;
+    log('guest open', guestUrl);
+    await send('Page.navigate', { url: guestUrl });
+  }
+  const gJoin = await waitLine(/^online join ([A-Z2-9]{6})/, 120000);
+  checks.guestJoinedCode = gJoin.m[1];
+
+  // ---- 対戦の開始（両者）----
+  const gm = await waitLine(/^match seed=(\d+) rules=(\d+) first=(\d) online seat=(\d) round=(\d+)/, 90000);
+  use(host);
+  const hm = await waitLine(/^match seed=(\d+) rules=(\d+) first=(\d) online seat=(\d) round=(\d+)/, 30000);
+  checks.connectedMs = Date.now() - regAt;
+  checks.hostMatch = hm.line;
+  checks.guestMatch = gm.line;
+  if (hm.m[1] !== gm.m[1] || hm.m[2] !== gm.m[2]) throw new Error('seed / rules differ: ' + hm.line + ' | ' + gm.line);
+  if (hm.m[4] === gm.m[4]) throw new Error('both sides have the same seat');
+  log('match started', hm.line, '|', gm.line);
+
+  // ---- 1 局目 ----
+  let shotDone = false;
+  host.scan = hm.index;
+  guest.scan = gm.index;
+  await playOnlineBoth(host, guest, async (P, moves) => {
+    if (!shotDone && P === guest && moves === 2) {
+      await sleep(500);
+      await shot('02_match_guest');
+      shotDone = true;
+    }
+  });
+  const hostEnd = host.endLine.match(/^end (\d+)-(\d+) (\S+)( resigned)? online/);
+  const guestEnd = guest.endLine.match(/^end (\d+)-(\d+) (\S+)( resigned)? online/);
+  checks.hostEnd = host.endLine;
+  checks.guestEnd = guest.endLine;
+  // 各ページの表示は自分が席 0。ホストの (a, b) ↔ ゲストの (b, a)、勝敗も反対
+  const swap = { p0: 'p1', p1: 'p0', draw: 'draw' };
+  if (!hostEnd || !guestEnd || hostEnd[1] !== guestEnd[2] || hostEnd[2] !== guestEnd[1] || swap[hostEnd[3]] !== guestEnd[3]) {
+    throw new Error('the results do not agree: ' + host.endLine + ' | ' + guest.endLine);
+  }
+  // 最終局面の hash（エンジンの正の局面。席は入れ替えていない）が両端末で一致する
+  use(host);
+  const hh = await waitLine(/^online hash ([0-9a-f]{16})/, 10000, host.scan - 1 > 0 ? Math.max(0, host.scan - 40) : 0);
+  use(guest);
+  const gh = await waitLine(/^online hash ([0-9a-f]{16})/, 10000, Math.max(0, guest.scan - 40));
+  checks.hostHash = hh.m[1];
+  checks.guestHash = gh.m[1];
+  if (hh.m[1] !== gh.m[1]) throw new Error('final hashes differ: ' + hh.m[1] + ' vs ' + gh.m[1]);
+  log('game 1 agreed:', host.endLine, '|', guest.endLine, 'hash', hh.m[1]);
+  checks.moves = { host: host.moves, guest: guest.moves };
+
+  // ---- 再戦（両者が「もう一度」→ 新しい seed）----
+  const resHost = (await (async () => { use(host); return waitLine(/^screen Result/, 30000, Math.max(0, host.scan - 40)); })());
+  use(guest);
+  const resGuest = await waitLine(/^screen Result/, 30000, Math.max(0, guest.scan - 40));
+  await sleep(600);
+  use(host);
+  await clickUi('Result', 'AgainButton', resHost.index);
+  await sleep(300);
+  use(guest);
+  await clickUi('Result', 'AgainButton', resGuest.index);
+  const gm2 = await waitLine(/^match seed=(\d+) rules=(\d+) first=(\d) online seat=(\d) round=(\d+)/, 30000, guest.scan);
+  use(host);
+  const hm2 = await waitLine(/^match seed=(\d+) rules=(\d+) first=(\d) online seat=(\d) round=(\d+)/, 30000, host.scan);
+  checks.rematch = { host: hm2.line, guest: gm2.line };
+  if (hm2.m[1] === hm.m[1] || hm2.m[1] !== gm2.m[1]) throw new Error('the rematch seed is not new or differs: ' + hm2.line + ' | ' + gm2.line);
+  if (hm2.m[4] === hm.m[4]) throw new Error('the seats were not swapped for the rematch');
+  log('rematch started', hm2.line, '|', gm2.line);
+
+  await sleep(1500);
+  results.checks = checks;
+  log('checks', JSON.stringify(checks));
+  for (const P of [host, guest]) {
+    results['lines_' + P.name] = P.lines.filter((l) => /^(online|match|end|screen Online|screen Result)/.test(l.line)).map((l) => l.line).slice(0, 80);
+  }
+  results.pageErrors = [...host.lines, ...guest.lines].filter((l) => /^(CONSOLE|EXCEPTION)/.test(l.line)).map((l) => l.line);
+}
+
 let exitCode = 0;
 try {
   await connect();
+  if (args.scenario === 'online') {
+    await runOnline();
+    throw { done: true };
+  }
   const { targetId } = await send('Target.createTarget', { url: 'about:blank' }, undefined);
   ({ sessionId } = await send('Target.attachToTarget', { targetId, flatten: true }, undefined));
   await send('Runtime.enable');

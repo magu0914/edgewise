@@ -63,6 +63,8 @@ namespace Edgewise.Game.UI
             sb.Append(UiText.CreditsBgmBody).Append("\n\n");
             Heading(UiText.CreditsSfxHeading);
             sb.Append(UiText.CreditsSfxBody).Append("\n\n");
+            Heading(UiText.CreditsOnlineHeading);
+            sb.Append(UiText.CreditsOnlineBody).Append("\n\n");
             Heading(UiText.CreditsHomageHeading);
             sb.Append(UiText.CreditsHomageBody).Append('\n');
             return sb.ToString();

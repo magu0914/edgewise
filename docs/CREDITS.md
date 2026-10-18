@@ -113,6 +113,39 @@ Icons made by Lorc, Delapouite, Caro Asercion, Skoll and Cathelineau, available 
   WebGL ビルドに含まれるのはこのフォントアセット（2048×1024 のアトラス）だけで、元の TTF は含まれない。
   文字を足したら `ProjectSetup` を実行し直す（文字の集合が変わったときだけ作り直す）。
 
+## PeerJS（オンライン対戦の通信）
+
+### PeerJS 1.5.4
+- 入手元: cdnjs の `peerjs/1.5.4/peerjs.min.js`（sha512 は cdnjs の SRI と一致を確認済み: `sha512-iFU+yF1keEaLDC9HEwPfLMSRaS0unBHE14GEgx6pQKJXjp5v0tvX8xpfp2lgJ62XEjbYp/M5C3CAmej/PWXMyA==`）。公式: https://peerjs.com/
+- ライセンス: MIT License, Copyright (c) 2015 Michelle Bu and Eric Zhang
+- 使い方: `Assets/Plugins/WebGL/peerjs.min.jspre` として WebGL ビルドに同梱する（CDN からは読まない。版を固定）。
+  取得したファイルから、末尾の `//# sourceMappingURL=...` の 1 行だけを除いてある（ソースマップは同梱しないため）。それ以外は無改変。
+  `EdgewisePeer.jslib` がこれを呼び、ブラウザ同士が WebRTC で直接つながる。部屋の登録と相手探しには PeerJS の公開サーバー（0.peerjs.com）を使う。
+
+```
+MIT License
+
+Copyright (c) 2015 Michelle Bu and Eric Zhang
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## Unity パッケージ同梱の素材
 
 ### TextMesh Pro Essential Resources（com.unity.ugui 同梱）

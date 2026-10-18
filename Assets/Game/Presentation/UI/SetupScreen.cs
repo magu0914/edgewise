@@ -29,6 +29,7 @@ namespace Edgewise.Game.UI
         [SerializeField] Button beginButton;
         [SerializeField] Button backButton;
         [SerializeField] Button dexButton;
+        [SerializeField] Button onlineButton;
 
         MatchSettings _settings;
 
@@ -39,6 +40,11 @@ namespace Edgewise.Game.UI
         public event Action DexPressed;
 
         public Button DexButton => dexButton;
+
+        /// <summary>オンライン対戦（Phase 7）。いまの設定（ルール・強さ帯）で部屋を作る／別の人の部屋に入る画面へ。</summary>
+        public event Action OnlinePressed;
+
+        public Button OnlineButton => onlineButton;
 
         public Button BeginButton => beginButton;
         public Button RuleButton(int i) => ruleButtons[i];
@@ -105,6 +111,7 @@ namespace Edgewise.Game.UI
             beginButton = UiKit.Button(root, "BeginButton", a, UiText.BeginMatch, 30, out _, new Color(0.25f, 0.42f, 0.40f));
             backButton = UiKit.Button(root, "BackButton", a, UiText.Back, 24, out _);
             dexButton = UiKit.Button(root, "SetupDexButton", a, UiText.TitleDex, 22, out _);
+            onlineButton = UiKit.Button(root, "SetupOnlineButton", a, UiText.SetupOnline, 24, out _, new Color(0.22f, 0.30f, 0.55f));
             ApplyLayout(false);
         }
 
@@ -140,6 +147,11 @@ namespace Edgewise.Game.UI
             });
             backButton.onClick.AddListener(() => BackPressed?.Invoke());
             dexButton.onClick.AddListener(() => DexPressed?.Invoke());
+            onlineButton.onClick.AddListener(() =>
+            {
+                _settings.Save();
+                OnlinePressed?.Invoke();
+            });
         }
 
         bool GetRule(int i)
@@ -190,6 +202,7 @@ namespace Edgewise.Game.UI
                 UiKit.Place(bandLabel.rectTransform, top, new Vector2(lx, -230f), new Vector2(500f, 34f));
                 for (int i = 0; i < 3; i++)
                     UiKit.Place((RectTransform)bandButtons[i].transform, top, new Vector2(lx - 170f + i * 170f, -270f), new Vector2(162f, 58f));
+                UiKit.Place((RectTransform)onlineButton.transform, top, new Vector2(lx, -395f), new Vector2(500f, 62f));
                 UiKit.Place((RectTransform)beginButton.transform, top, new Vector2(lx + 80f, -560f), new Vector2(300f, 80f));
                 UiKit.Place((RectTransform)backButton.transform, top, new Vector2(lx - 170f, -570f), new Vector2(160f, 60f));
                 float rx = 310f;
@@ -208,6 +221,7 @@ namespace Edgewise.Game.UI
                     UiKit.Place((RectTransform)bandButtons[i].transform, top, new Vector2(-220f + i * 220f, -228f), new Vector2(206f, 62f));
                 UiKit.Place(rulesLabel.rectTransform, top, new Vector2(0f, -304f), new Vector2(660f, 34f));
                 for (int i = 0; i < RuleCount; i++) LayoutRule(i, top, new Vector2(0f, -340f - i * 78f), new Vector2(680f, 72f), true);
+                UiKit.Place((RectTransform)onlineButton.transform, top, new Vector2(0f, -1152f), new Vector2(520f, 76f));
                 UiKit.Place((RectTransform)backButton.transform, top, new Vector2(-210f, -1062f), new Vector2(220f, 80f));
                 UiKit.Place((RectTransform)beginButton.transform, top, new Vector2(110f, -1056f), new Vector2(380f, 92f));
             }

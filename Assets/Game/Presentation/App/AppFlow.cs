@@ -7,6 +7,7 @@ using Edgewise.Game.Campaign;
 using Edgewise.Game.Controls;
 using Edgewise.Game.Juice;
 using Edgewise.Game.Match;
+using Edgewise.Game.Online;
 using Edgewise.Game.UI;
 using Edgewise.Game.View;
 using UnityEngine;
@@ -45,6 +46,7 @@ namespace Edgewise.Game.App
         [SerializeField] TitleFan fan;
         [SerializeField] CampaignController campaign;
         [SerializeField] HowToScreen howTo;
+        [SerializeField] OnlineController online;
 
         MatchSettings _settings;
         MatchSettings _last;
@@ -66,6 +68,7 @@ namespace Edgewise.Game.App
         public TitleFan Fan => fan;
         public CampaignController Campaign => campaign;
         public HowToScreen HowTo => howTo;
+        public OnlineController Online => online;
         public GameAssets Assets => assets;
         public GameObject Table => table;
 
@@ -78,8 +81,9 @@ namespace Edgewise.Game.App
 
         public void Wire(GameAssets a, GameObject tableRoot, TitleScreen t, SetupScreen s, HudView h, MenuPanel m, ResultScreen r, BannerView b,
             MatchController mc, FpsMeter f, SettingsPanel sp, BgmPlayer music, CardDex cardDex, CreditsScreen creditsScreen, TitleFan titleFan,
-            CampaignController campaignController, HowToScreen howToScreen)
+            CampaignController campaignController, HowToScreen howToScreen, OnlineController onlineController)
         {
+            online = onlineController;
             campaign = campaignController;
             howTo = howToScreen;
             settings = sp;
@@ -127,9 +131,19 @@ namespace Edgewise.Game.App
             howTo.Closed += () => ShowTitle(title.HowToButton);
             setup.BeginPressed += s => StartMatch(s);
             setup.BackPressed += ShowTitle;
-            result.AgainPressed += () => StartMatch(_last ?? _settings);
+            setup.OnlinePressed += () => online.Enter(setup.Current);
+            result.AgainPressed += () =>
+            {
+                if (online.IsActive) online.RequestRematch();
+                else StartMatch(_last ?? _settings);
+            };
             result.SettingsPressed += () =>
             {
+                if (online.IsActive)
+                {
+                    online.Leave(); // 部屋を出る
+                    return;
+                }
                 StopMatch();
                 ShowSetup();
             };
@@ -163,6 +177,9 @@ namespace Edgewise.Game.App
                 return;
             }
             ShowTitle();
+            // 招待 URL（?room=コード）で開いたら、その部屋へ入る（Phase 7）
+            var room = RoomCode.Normalize(Param("room"));
+            if (room != null) online.EnterWithRoom(room);
             // 監査用: 立ち絵のコンタクトシート（?portraits と ?log のとき）
             if (AutomationLog.Enabled && HasParam("portraits")) PortraitSheet.Show(title.transform.parent, assets);
         }
@@ -175,6 +192,7 @@ namespace Edgewise.Game.App
             {
                 if (settings.IsOpen) settings.Back();
                 else if (menu.IsOpen) menu.Close();
+                else if (online != null && online.ScreenOpen) online.Back();
             }
         }
 
@@ -241,6 +259,7 @@ namespace Edgewise.Game.App
             title.Hide();
             setup.Hide();
             result.Hide();
+            if (online != null) online.HideScreens();
             menu.gameObject.SetActive(false);
             settings.gameObject.SetActive(false);
             dex.Hide();
@@ -355,6 +374,21 @@ namespace Edgewise.Game.App
 
         /// <summary>星図巡りの対戦の画面にする（盤・HUD・対戦の BGM）。</summary>
         public void BeginCampaignMatchView()
+        {
+            StopMatch();
+            HideAll();
+            table.SetActive(true);
+            hud.SetVisible(true);
+            EventSystem.current?.SetSelectedGameObject(null);
+            Controls.Blocked = false;
+            ResultReady = false;
+            LastOutcome = null;
+            AutomationLog.Buttons("Hud", hud.transform);
+            PlayBgm(BgmCue.Match);
+        }
+
+        /// <summary>オンライン対戦の画面にする（盤・HUD・対戦の BGM。Phase 7）。</summary>
+        public void BeginOnlineMatchView()
         {
             StopMatch();
             HideAll();

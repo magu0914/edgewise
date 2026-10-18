@@ -9,6 +9,7 @@ using Edgewise.Game.Audio;
 using Edgewise.Game.App;
 using Edgewise.Game.Controls;
 using Edgewise.Game.Juice;
+using Edgewise.Game.Online;
 using Edgewise.Game.Tweening;
 using Edgewise.Game.UI;
 using Edgewise.Game.View;
@@ -52,6 +53,8 @@ namespace Edgewise.Game.Match
         bool _hintShown;
         int _tokensMax0 = GameConstants.PivotTokens;
         int _tokensMax1 = GameConstants.PivotTokens;
+        OnlineMatchSession _onlineSession;
+        bool _mirror;
 
         public GameState State { get; private set; }
         public MatchSettings Settings { get; private set; }
@@ -65,6 +68,9 @@ namespace Edgewise.Game.Match
         public IMatchFx Fx => fx != null ? (IMatchFx)fx : NullMatchFx.Instance;
         public JuiceFx JuiceFx => fx;
         public HintEngine Hint => _hint;
+
+        /// <summary>オンライン対戦の最中か（CPU とヒントは使えない。DESIGN §9-1）。</summary>
+        public bool IsOnline => _onlineSession != null;
 
         /// <summary>直近に表示したヒント（テスト用）。</summary>
         public HintResult? ShownHint { get; private set; }
@@ -101,6 +107,8 @@ namespace Edgewise.Game.Match
 
         void Update()
         {
+            // オンライン: 相手が降参・退出・不戦勝・通信の不整合で終えたら、自分の手の待ちをやめる
+            if (_onlineSession != null && player.IsAwaitingMove && _onlineSession.Phase != SessionPhase.Playing) player.Resign();
             if (!_hint.IsRunning) return;
             if (State == null || !ReferenceEquals(_hint.State, State) || !player.IsAwaitingMove)
             {
@@ -117,7 +125,7 @@ namespace Edgewise.Game.Match
         /// <summary>プレイヤーの手番ならヒントの探索を始める（数フレームに分けて読む）。</summary>
         public bool RequestHint()
         {
-            if (State == null || !player.IsAwaitingMove || _hint.IsRunning) return false;
+            if (State == null || !player.IsAwaitingMove || _hint.IsRunning || _onlineSession != null) return false;
             ClearHint();
             var camp = Settings?.campaign;
             // 星図巡り: 同じカードを両者が持ちうるので Shared。候補は相手の持ちカード（すべて見ていれば）か全カード
@@ -267,6 +275,125 @@ namespace Edgewise.Game.Match
             }
         }
 
+        // ------------------------------------------------------------------
+        // オンライン対戦（Phase 7。DESIGN §9-1）
+        // ------------------------------------------------------------------
+
+        /// <summary>席 1 で遊ぶ側は、局面とイベントを席を入れ替えた写しで表示する（自分が常に手前の席 0）。</summary>
+        GameState ViewOf(GameState s) => _mirror ? StateMirror.Mirror(s) : s;
+
+        /// <summary>
+        /// オンライン対戦を 1 局進める。局面の正は session.State（hashState を突き合わせる側）で、ここの State は表示用の写し。
+        /// 自分の番は PlayerController から Move を受けて session に渡し、相手の番は session に届いた手を待つ。
+        /// 通信の不整合などで続けられなくなったら null を返す（結果画面は出さない）。
+        /// </summary>
+        public async Awaitable<MatchOutcome> RunOnlineAsync(OnlineMatchSession session, CancellationToken ct)
+        {
+            _onlineSession = session;
+            _mirror = session.LocalSeat == Player.P1;
+            Settings = new MatchSettings { seat0 = SeatKind.Human, seat1 = SeatKind.Human };
+            IsRunning = true;
+            _resignRequested = false;
+            MovesPlayed = 0;
+            try
+            {
+                State = ViewOf(session.StartState);
+                _tokensMax0 = State.GetPivotTokens(Player.P0);
+                _tokensMax1 = State.GetPivotTokens(Player.P1);
+                if (AutomationLog.Enabled)
+                    AutomationLog.Write("match seed=" + session.Seed + " rules=" + session.Rules.ToBitString() + " first=" + (int)State.FirstPlayer
+                        + " online seat=" + (int)session.LocalSeat + " round=" + session.Round);
+                await SetupViewsAsync(ct);
+
+                bool resigned = false;
+                while (State.Phase == Phase.Playing)
+                {
+                    UpdateHud();
+                    PendingMove pending;
+                    if (State.Turn == Player.P0)
+                    {
+                        hud.SetTurn(UiText.YourTurn, Theme.OwnerColor(Player.P0));
+                        AutomationLog.Buttons("Hud", hud.transform);
+                        Move? r = await player.WaitForMoveAsync(State, Player.P0, ct);
+                        if (r == null)
+                        {
+                            // 降参した。相手の降参・退出・通信の不整合で待ちをやめたときは、session がすでに終わっている
+                            if (session.Phase == SessionPhase.Playing)
+                            {
+                                session.Resign();
+                                resigned = true;
+                            }
+                            break;
+                        }
+                        pending = session.SubmitMove(r.Value);
+                    }
+                    else
+                    {
+                        hud.SetTurn(UiText.OpponentTurn, Theme.OwnerColor(Player.P1));
+                        while (!session.TryTakeOpponentMove(out pending))
+                        {
+                            if (session.Phase != SessionPhase.Playing) break;
+                            if (_resignRequested)
+                            {
+                                session.Resign();
+                                resigned = true;
+                                break;
+                            }
+                            await Awaitable.NextFrameAsync(ct);
+                        }
+                        if (pending == null) break;
+                    }
+
+                    var before = State;
+                    State = ViewOf(pending.Result.State);
+                    MovesPlayed++;
+                    var events = _mirror ? StateMirror.Mirror(pending.Result.Events) : pending.Result.Events;
+                    await _eventPlayer.PlayAsync(before, pending.Move, events, ct);
+                    if (State.SuddenDeathRound != before.SuddenDeathRound) await RebuildForSuddenDeathAsync(ct);
+                    SyncScores();
+                    if (_resignRequested && State.Phase == Phase.Playing && session.Phase == SessionPhase.Playing)
+                    {
+                        session.Resign();
+                        resigned = true;
+                        break;
+                    }
+                }
+
+                UpdateHud();
+                hud.SetTurn(UiText.MatchOver, Theme.Ink);
+                if (session.IsAborted) return null;
+                var score = GameEngine.Score(State);
+                GameResult result;
+                switch (session.Ending)
+                {
+                    case EndReason.Resigned: result = GameResult.P1; break;
+                    case EndReason.OpponentResigned:
+                    case EndReason.OpponentLeft:
+                    case EndReason.OpponentForfeit: result = GameResult.P0; break;
+                    default: result = GameEngine.ResultOfScore(score); break;
+                }
+                var outcome = new MatchOutcome
+                {
+                    Score = score,
+                    Result = result,
+                    Resigned = resigned || session.Ending == EndReason.OpponentResigned || session.Ending == EndReason.OpponentLeft
+                        || session.Ending == EndReason.OpponentForfeit,
+                    Moves = MovesPlayed,
+                };
+                if (AutomationLog.Enabled)
+                    AutomationLog.Write("end " + score.P0 + "-" + score.P1 + " " + outcome.Result.ToId() + (outcome.Resigned ? " resigned" : "") + " online");
+                if (AutomationLog.Enabled) AutomationLog.Write("online hash " + GameEngine.HashState(session.State));
+                return outcome;
+            }
+            finally
+            {
+                IsRunning = false;
+                _onlineSession = null;
+                _mirror = false;
+            }
+        }
+
+
         async Awaitable<Move> ThinkAsync(CancellationToken ct)
         {
             CpuThinking = true;
@@ -346,8 +473,10 @@ namespace Edgewise.Game.Match
             await Tweens.Delay(Juice.finaleHold * tf, ct);
         }
 
-        bool FaceDown(Player p) =>
-            !State.Rules.Open && Settings.Seat(p) == SeatKind.Cpu && Settings.Seat(p.Opponent()) == SeatKind.Human;
+        // オンラインでは、席 0 が自分（手前）・席 1 が相手。Open OFF なら相手の手札を伏せる
+        bool FaceDown(Player p) => _onlineSession != null
+            ? !State.Rules.Open && p == Player.P1
+            : !State.Rules.Open && Settings.Seat(p) == SeatKind.Cpu && Settings.Seat(p.Opponent()) == SeatKind.Human;
 
         void EnsurePool(int n)
         {
@@ -415,7 +544,8 @@ namespace Edgewise.Game.Match
                 }
             }
             var opp = Settings.campaign?.Opponent;
-            hud.SetNames(Settings.seat0 == SeatKind.Human ? UiText.You : UiText.Cpu, opp != null ? opp.Name : UiText.Cpu);
+            if (_onlineSession != null) hud.SetNames(UiText.You, UiText.Opponent);
+            else hud.SetNames(Settings.seat0 == SeatKind.Human ? UiText.You : UiText.Cpu, opp != null ? opp.Name : UiText.Cpu);
             hud.SetOpponent(opp);
             SyncScores();
             UpdateHud();
@@ -423,7 +553,8 @@ namespace Edgewise.Game.Match
             hand0.Layout(false);
             hand1.Layout(false);
             bool youFirst = State.FirstPlayer == Player.P0;
-            string first = Settings.seat0 == SeatKind.Human ? (youFirst ? UiText.YouFirst : UiText.CpuFirst) : "P" + (int)State.FirstPlayer + " FIRST";
+            string first = _onlineSession != null ? (youFirst ? UiText.YouFirst : UiText.OpponentFirst)
+                : Settings.seat0 == SeatKind.Human ? (youFirst ? UiText.YouFirst : UiText.CpuFirst) : "P" + (int)State.FirstPlayer + " FIRST";
             await banner.Show(first, Theme.OwnerColor(State.FirstPlayer), Juice.infoBannerTime * tf, ct, null, 0.6f);
         }
 
